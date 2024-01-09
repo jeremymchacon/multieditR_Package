@@ -1,3 +1,5 @@
+
+
 detectEdits = function(
     # Set parameters
   sample_name,
@@ -207,6 +209,7 @@ detectEdits = function(
     sample_null = sample_df %>% filter(!(ctrl_post_aligned_index %in% motif_positions)) # This dataframe consists of all bases in the sample where the motif is not found in the ctrl sequence
     sample_alt = sample_df %>% filter(ctrl_post_aligned_index %in% motif_positions) # This dataframe consists of all bases in the sample where the motif is found in the ctrl sequence
 
+
     # Find all potential events of significant noise
     filtered_sample_alt = sample_alt %>%
       #dplyr::filter(grepl(wt, ctrl_max_base)) %>% # Use the ctrl wt base for determining data
@@ -274,23 +277,31 @@ detectEdits = function(
       dplyr::select(ctrl_index, ctrl_max_base, max_base, A_area:T_area, A_perc:T_perc) %>%
       dplyr::mutate(motif = motif, sample_file = sample_file)
 
-    ### Plot chromatograms
-    sample_chromatogram = geom_chromatogram(sample_sanger, start = sample_chromatogram_indices[1], end = sample_chromatogram_indices[1] + nchar(motif)-1) +
-      ggtitle(paste0(sample_name, " sample")) +
-      theme(plot.title = element_text(size = 16))
-
-
-    if(use_ctrl_seq){
-      ctrl_chromatogram = NULL
-    } else
-    {
-      ctrl_chromatogram = geom_chromatogram(ctrl_sanger, start = ctrl_chromatogram_indices[1], end = ctrl_chromatogram_indices[1] + nchar(motif)-1) +
-        ggtitle(paste0(sample_name, " control")) +
-        theme(plot.title = element_text(size = 16))
-    }
 
     # chromatograms = grid.arrange(arrangeGrob(sample_chromatogram, ctrl_chromatogram, ncol = 1, nrow = 2), heights = 20, widths = 30)
+    if (!exists("ctrl_sanger")){
+      ctrl_sanger = NULL
+    }
+    pre_cross_align_sample_df <- pre_cross_align_sample_df %>%
+      mutate(max_base_perc = 100*max_base_height / Tot.Area)
 
+    output_sample_alt = output_sample_alt %>%
+      dplyr::select(index, ctrl_index, A_perc:T_perc) %>%
+      gather(base, perc, A_perc:`T_perc`) %>%
+      inner_join(., output_sample_alt %>%
+                   dplyr::select(index, A_sig:T_sig) %>%
+                   gather(base_sig, sig, A_sig:T_sig)
+      ) %>%
+      mutate(base = gsub("_perc", "", base), base_sig = gsub("_sig", "", base_sig)) %>%
+      mutate(perc = perc*100, sig = {ifelse(sig, "Significant", "Non-significant")}) %>%
+      filter(base == base_sig) %>%
+      filter(grepl(pattern = edit, x = base)) %>%
+      mutate(tmp = 1) %>%
+      group_by(base) %>%
+      mutate(tally = cumsum(tmp)) %>%
+      dplyr::select(-tmp, -base_sig)
+
+    motif_positions = data.frame(ctrl_post_aligned_index = motif_positions, motif_id = names(motif_positions))
 
     ###
     output = list(#"sample_data" = sample_df,
@@ -298,9 +309,21 @@ detectEdits = function(
       # "control_sequence" = init_ctrl_seq,
       # "control_data" = ctrl_df,
       "statistical_parameters" = zaga_parameters,
-      "sample_chromatogram" = sample_chromatogram,
-      "control_chromatogram" = ctrl_chromatogram
+      "sample_sanger" = sample_sanger,
+      "sample_fastq" = sample_fastq,
+      "ctrl_sanger" = ctrl_sanger,
+      "ctrl_fastq" = ctrl_fastq,
+      "sample_locs" = c(sample_chromatogram_indices[1],
+                        sample_chromatogram_indices[1] + nchar(motif) + 1),
+      "ctrl_locs" = c(ctrl_chromatogram_indices[1],
+                      ctrl_chromatogram_indices[1] + nchar(motif) + 1),
+      "intermediate_data" = list("raw_sample_df"=raw_sample_df,
+                               "sample_alt"=sample_alt,
+                               "pre_cross_align_sample_df"=pre_cross_align_sample_df,
+                               "output_sample_alt" = output_sample_alt,
+                               "motif_positions" = motif_positions)
     )
+    class(output) = "multieditR"
 
     # Reset start directory
     message(paste0(round(Sys.time() - start, 2), " seconds elapsed."))

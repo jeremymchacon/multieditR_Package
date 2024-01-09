@@ -1,3 +1,8 @@
+
+plot.multieditR <- function(fit){
+  geom_chromatogram(fit$sample_sanger,fit$sample_locs[1], fit$sample_locs[2])
+}
+
 bases = c("A", "C", "G", "T")
 ACGT = bases
 
@@ -171,6 +176,8 @@ make_samp_sanger_df = function(samp_sanger, ctrl_seq){
 }
 
 
+
+
 align_and_trim = function(pattern_seq, subject_seq, min_continuity = 15){
 
   gap_length = min_continuity - 1
@@ -319,16 +326,23 @@ pvalue_adjust = function(sanger_df, wt, boi, motif, sample_file, critical_values
 revcom = function(x){as.character(reverseComplement(DNAString(x)))}
 
 
-### Plotting functions
-plotRawSample = function(raw_sample_df, sample_alt, pre_cross_align_sample_df){
+
+###
+# Plotting Functions
+###
+plot_raw_sample = function(fit){
+  raw_sample_df = fit$intermediate_data$raw_sample_df
+  sample_alt = fit$intermediate_data$sample_alt
+  pre_cross_align_sample_df = fit$intermediate_data$pre_cross_align_sample_df
   raw_sample_df %>%
-    ggplot(aes(x = index, y = max_base_perc)) +
+    ggplot(aes(x = index, y = 100*max_base_height / Tot.Area)) +
     scale_y_continuous(limits = c(0,100), breaks = seq(0,100, 10), expand = c(0,0)) +
     scale_x_continuous(limits = c(0, max(raw_sample_df$index)), expand = c(0,0)) +
-    geom_bar(data = sample_alt, aes(x = index, y = 100), stat = "identity", fill = "#53BCC2", color = "#53BCC2") +
+    geom_bar(data = sample_alt,
+             aes(x = index, y = 100), stat = "identity", fill = "#53BCC2", color = "#53BCC2") +
     geom_rect(xmin = min(pre_cross_align_sample_df$index), ymin = 0,
               xmax = max(pre_cross_align_sample_df$index), ymax = 100,
-              fill = "white", color = "black", alpha = 0) +
+              fill = "white", color = "black", alpha = 0)+
     xlab("Position in sample file") +
     ylab("Percent signal of basecall") +
     geom_hline(yintercept = mean(pre_cross_align_sample_df$max_base_perc), color = "darkred", size = 1) +
@@ -344,7 +358,7 @@ plotRawSample = function(raw_sample_df, sample_alt, pre_cross_align_sample_df){
               xmax = min(pre_cross_align_sample_df$index) +
                 (max(pre_cross_align_sample_df$index) - min(pre_cross_align_sample_df$index))*0.025 + 215,
               ymax = 20,
-              fill = "white", color = "black") +
+              fill = "white", color = "black")+
     annotate(geom = "text",
              label = paste0("Average percent signal (", round(mean(pre_cross_align_sample_df$max_base_perc), 1),"%)") ,
              color = "darkred",
@@ -368,9 +382,26 @@ plotRawSample = function(raw_sample_df, sample_alt, pre_cross_align_sample_df){
     theme_classic(base_size = 18)
 }
 
+### Plotting functions
+
+
 # Function for plotting trimmed sample data
-plotTrimmedSample = function(sample_df, pre_cross_align_sample_df, output_sample_alt, raw_sample_df, sample_alt){
-  sample_df %>%
+plot_trimmed_sample = function(fit){
+  sample_df = fit$sample_data
+  pre_cross_align_sample_df = fit$intermediate_data$pre_cross_align_sample_df
+  output_sample_alt = fit$intermediate_data$output_sample_alt
+  raw_sample_df = fit$intermediate_data$raw_sample_df
+  sample_alt = fit$intermediate_data$sample_alt
+  motif_positions = fit$intermediate_data$motif_positions %>%
+    mutate(ctrl_index = ctrl_post_aligned_index)
+
+  sample_df$ctrl_max_base_perc = 100*sapply(1:nrow(sample_df), FUN = function(i){
+    unname(unlist(sample_df[i, paste0(sample_df$ctrl_max_base[i],"_perc")]))
+  })
+  raw_sample_df$ctrl_max_base_perc = 100*sapply(1:nrow(raw_sample_df), FUN = function(i){
+    unname(unlist(raw_sample_df[i, paste0(raw_sample_df$max_base[i],"_perc")]))
+  })
+  raw_sample_df %>%
     mutate(perc = (100-ctrl_max_base_perc) %>% round(., 0)) %>%
     ggplot(aes(x = index, y = perc)) +
     geom_line() +
@@ -386,9 +417,8 @@ plotTrimmedSample = function(sample_df, pre_cross_align_sample_df, output_sample
     geom_hline(yintercept = mean(pre_cross_align_sample_df$max_base_height), color = "darkred", size = 1) +
     geom_line() +
     geom_point(data = output_sample_alt %>%
-                 mutate(sig = {ifelse(sig, "Signficant", "Non-significant")}) %>%
-                 mutate(perc = (100-ctrl_max_base_perc) %>% round(., 0)),
-               aes(fill = motif_id, x = index, y = perc, alpha = sig), pch = 21, size = 2, color = "black") +
+                 left_join(motif_positions),
+               aes( x = index, y = perc, alpha = sig), pch = 21, size = 2, color = "black") +
     geom_rect(xmin = 0, ymin = 0, xmax = min(pre_cross_align_sample_df$index), ymax = 100,
               fill = "grey", color = "black", alpha = 0.01) +
     geom_rect(xmin = max(pre_cross_align_sample_df$index), ymin = 0,
@@ -399,26 +429,8 @@ plotTrimmedSample = function(sample_df, pre_cross_align_sample_df, output_sample
     theme(legend.position = "none")
 }
 
-# Function for producing the table data on editing
-calculateEditingData = function(output_sample_alt, edit) {
-  output_sample_alt %>%
-    dplyr::select(index, ctrl_index, A_perc:T_perc) %>%
-    gather(base, perc, A_perc:`T_perc`) %>%
-    inner_join(., output_sample_alt %>%
-                 dplyr::select(index, A_sig:T_sig) %>%
-                 gather(base_sig, sig, A_sig:T_sig)
-    ) %>%
-    mutate(base = gsub("_perc", "", base), base_sig = gsub("_sig", "", base_sig)) %>%
-    mutate(perc = perc*100, sig = {ifelse(sig, "Significant", "Non-significant")}) %>%
-    filter(base == base_sig) %>%
-    filter(grepl(pattern = edit, x = base)) %>%
-    mutate(tmp = 1) %>%
-    group_by(base) %>%
-    mutate(tally = cumsum(tmp)) %>%
-    dplyr::select(-tmp, -base_sig)
-}
-
-plotEditingData = function(editing_data) {
+plot_editing_barplot = function(fit){
+  editing_data = fit$intermediate_data$output_sample_alt
   editing_data %>%
     ggplot(aes(x = sig, y = perc, color = sig)) +
     scale_y_continuous(limits = c(0,100), breaks = seq(0,100,10)) +
@@ -435,6 +447,7 @@ plotEditingData = function(editing_data) {
           axis.ticks.x = element_blank()) +#sum(grepl(edit, bases))) +
     facet_wrap(.~base, nrow = 1, scales = "free_x")
 }
+
 
 tableEditingData = function(editing_data) {
   editing_data %>%

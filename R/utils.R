@@ -240,12 +240,12 @@ make_ZAGA_df = function(sanger_df, p_adjust){
            0.0100030237039207, 0.0100045782875701, 0.0100048452355807, 0.0100049548867042)
     message("Replacement vector used for low noise.")
     } # add noise if all 0s, or all 0s and one other value.
-    tryCatch(gamlss((x)~1, family = ZAGA), error=function(e) # Progressively step up the mu.start if it fails
-      tryCatch(gamlss((x)~1, family = ZAGA, mu.start = 1), error=function(e)
-        tryCatch(gamlss((x)~1, family = ZAGA, mu.start = 2), error=function(e)
-          tryCatch(gamlss((x)~1, family = ZAGA, mu.start = 3), error=function(e) # additional step added.
-            tryCatch(gamlss((x)~1, family = ZAGA, mu.start = 4), error=function(e) # additional step added.
-              gamlss((x)~1, family = ZAGA, mu.start = mean(x))
+    tryCatch(gamlss::gamlss((x)~1, family = ZAGA), error=function(e) # Progressively step up the mu.start if it fails
+      tryCatch(gamlss::gamlss((x)~1, family = ZAGA, mu.start = 1), error=function(e)
+        tryCatch(gamlss::gamlss((x)~1, family = ZAGA, mu.start = 2), error=function(e)
+          tryCatch(gamlss::gamlss((x)~1, family = ZAGA, mu.start = 3), error=function(e) # additional step added.
+            tryCatch(gamlss::gamlss((x)~1, family = ZAGA, mu.start = 4), error=function(e) # additional step added.
+              gamlss::gamlss((x)~1, family = ZAGA, mu.start = mean(x))
             )
           )
         )

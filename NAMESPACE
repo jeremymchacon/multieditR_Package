@@ -1,0 +1,13 @@
+exportPattern("^[[:alpha:]]+")
+import("magrittr")
+importFrom("sangerseqR","readsangerseq", "makeBaseCalls", "peakAmpMatrix", "setAllelePhase")
+import("Biostrings")
+import("dplyr")
+import("ggplot2")
+import("gamlss")
+import("berryFunctions")
+importFrom("tibble","as_tibble","rowid_to_column")
+importFrom("readr","read_lines")
+importFrom("plyr","ldply")
+
+

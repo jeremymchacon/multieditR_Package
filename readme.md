@@ -5,7 +5,7 @@ multiEditR helps identify edits from Sanger Sequences
 To install, use:
 
 ```
-devtools::install_github("chaco001/multieditR")
+devtools::install_github("jeremymchacon/multieditR")
 ```
 
 Basic functionality:

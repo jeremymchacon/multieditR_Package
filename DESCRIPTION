@@ -9,3 +9,19 @@ Description: More about what it does (maybe more than one line)
 License: What license is it under?
 Encoding: UTF-8
 LazyData: true
+Depends: R (>= 4.1.0)
+BiocViews:
+Imports: 
+    ggplot2 (>= 3.4.4),
+    tibble (>= 3.2.1),
+    stringr (>= 1.5.0),
+    berryFunctions (>= 1.22.0),
+    tidyr (>= 1.3.0),
+    plyr (>= 1.8.9),
+    dplyr (>= 1.1.4),
+    readr (>= 2.1.4),
+    magrittr (>= 2.0.3),
+    gamlss (>= 5.4),
+    gamlss.dist (>= 6.1),
+    Biostrings (>= 2.70.1),
+    sangerseqR (>= 1.38.0)

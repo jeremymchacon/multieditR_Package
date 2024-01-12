@@ -11,10 +11,11 @@ Encoding: UTF-8
 LazyData: true
 Depends: R (>= 4.1.0)
 BiocViews:
-    Biostrings (>= 2.70.1),
-    sangerseqR (>= 1.38.0)
+  rnaseq
 Imports: 
     ggplot2 (>= 3.4.4),
+    Biostrings (>= 2.70.1),
+    sangerseqR (>= 1.38.0),
     tibble (>= 3.2.1),
     stringr (>= 1.5.0),
     berryFunctions (>= 1.22.0),
@@ -25,4 +26,6 @@ Imports:
     magrittr (>= 2.0.3),
     gamlss (>= 5.4),
     gamlss.dist (>= 6.1)
-
+Suggests: 
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3

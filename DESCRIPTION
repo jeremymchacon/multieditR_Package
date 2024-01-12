@@ -14,8 +14,8 @@ BiocViews:
   rnaseq
 Imports: 
     ggplot2 (>= 3.4.4),
-    Biostrings (>= 2.70.1),
-    sangerseqR (>= 1.38.0),
+    Biostrings (>= 2.66.0),
+    sangerseqR (>= 1.34.0),
     tibble (>= 3.2.1),
     stringr (>= 1.5.0),
     berryFunctions (>= 1.22.0),

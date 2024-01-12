@@ -11,6 +11,8 @@ Encoding: UTF-8
 LazyData: true
 Depends: R (>= 4.1.0)
 BiocViews:
+    Biostrings (>= 2.70.1),
+    sangerseqR (>= 1.38.0)
 Imports: 
     ggplot2 (>= 3.4.4),
     tibble (>= 3.2.1),
@@ -22,6 +24,5 @@ Imports:
     readr (>= 2.1.4),
     magrittr (>= 2.0.3),
     gamlss (>= 5.4),
-    gamlss.dist (>= 6.1),
-    Biostrings (>= 2.70.1),
-    sangerseqR (>= 1.38.0)
+    gamlss.dist (>= 6.1)
+

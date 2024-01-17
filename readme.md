@@ -1,6 +1,6 @@
 ## Repository for the multieditR package 
 
-multiEditR helps identify edits from Sanger Sequences
+multiEditR helps identify edits from Sanger Sequences. The algorithms were developed by Mitch Kleusner, and put into this R package by Jeremy Chacón. 
 
 To install, use:
 
@@ -8,8 +8,9 @@ To install, use:
 devtools::install_github("jeremymchacon/multieditR")
 ```
 
-Basic functionality:
+## Basic functionality:
 
+Here, we load in two example sanger sequences, then detect whether "A" bases were edited within the motif "AGTAGCTGGGATTACAGATG" using detect_edits(), the main function of the package. 
 ```
 library(multieditR)
 sample_file = system.file("extdata", "RP272_cdna_wt.ab1", package="multieditR")
@@ -30,6 +31,11 @@ fit = detect_edits(
   wt = wt, 
   edit = edit 
 )
+```
+
+After fitting is complete, multiple graphs and tables can be made:
+
+```
 
 # chromatogram of predicted edits in sample
 geom_chromatogram(fit$sample_sanger,fit$sample_locs[1], fit$sample_locs[2])
@@ -52,3 +58,45 @@ result = fit$sample_data
 stats = fit$statistical_parameters 
 ```
 
+## Batch Mode
+
+The package can also take in a parameters spreadsheet and run the edit-detection algorithm on many samples at once, then generate a single html report from all of the samples. 
+
+The package comes with an example which can be loaded like so:
+
+```
+params = load_example_params()
+head(params)
+```
+
+Note that you can save a skeleton parameters spreadsheet to modify with your own data:
+
+```
+save_batch_skeleton("./my_parameters.xlsx")
+```
+
+We use "detect_edits_batch" to fit all samples simulateously:
+
+```
+fits = detect_edits_batch(params)
+```
+
+We can access summary tables for all samples:
+
+```
+data.tbl = get_batch_results_table(fits)
+stats.tbl = get_batch_stats_table(fits)
+```
+
+Or access a single fit model
+
+```
+fit1 = fits[["Test1"]] # Test1 was a sample name in the parameters sheet
+geom_chromatogram(fit1$sample_sanger,fit1$sample_locs[1], fit1$sample_locs[2])
+```
+
+Or make a report containing results from all of the samples:
+
+```
+create_multieditR_report(fits, params, "my_html_report.html")
+```

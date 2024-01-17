@@ -1,0 +1,107 @@
+---
+title: "multiEditR batch mode results"
+author: "Mitchell Kluesner"
+date: "`r format(Sys.time(), '%d %B, %Y, %H:%M')`"
+output:
+  html_document:
+    fig_height: 6
+    fig_width: 10
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: yes
+  pdf_document:
+    toc: no
+  word_document:
+    toc: no
+params:
+   params.tbl: NULL
+   results.list: NULL
+---
+
+# Parameters table used
+This should match your .xlsx 
+```{r, eval = TRUE, message = FALSE, echo = FALSE}
+DT::datatable(params$params.tbl)
+```
+
+# Compiled Results
+## Editing data
+```{r, eval = TRUE, message = FALSE, echo = FALSE}
+  DT::datatable(get_batch_results_table(params$results.list))
+```
+
+## Model fit data
+```{r, eval = TRUE, message = FALSE, echo = FALSE}
+  DT::datatable(mutate_if(get_batch_stats_table(params$results.list),
+                          is.numeric, round, digits = 3))
+```
+
+
+# Individual Results
+
+```{r, results="asis", echo = FALSE, message = FALSE}
+library(htmltools)
+#params.tbl = params$params.tbl
+fits = params$results.list
+cat("  ")
+
+# # this works:
+# geom_chromatogram(fits[[1]]$sample_sanger,fits[[1]]$sample_locs[1], fits[[1]]$sample_locs[2])
+# geom_chromatogram(fits[[1]]$ctrl_sanger,fits[[1]]$ctrl_locs[1], fits[[1]]$ctrl_locs[2])
+# geom_chromatogram(fits[[2]]$sample_sanger,fits[[2]]$sample_locs[1], fits[[2]]$sample_locs[2])
+
+# pre-making plots is important to not cause race conditions
+plots = list()
+for (fit in fits){
+  plt1 =  geom_chromatogram(fit$sample_sanger,fit$sample_locs[1], fit$sample_locs[2])
+   if ( is.null(fit$ctrl_sanger)){
+     plt2 = "control sequence was not an ab1, so no chromatogram"
+   }else{
+     plt2 = geom_chromatogram(fit$ctrl_sanger,fit$ctrl_locs[1], fit$ctrl_locs[2])
+   }
+ plots[[fit$sample_name]] =  list(plt1, plt2)
+}
+
+# here the actual rendering is done
+for (fit in fits){
+  cat(HTML(paste0("<h2>", fit$sample_name, "</h2>")), "\n")
+
+  cat("\n", "sample file:", 
+      base::basename(fit$intermediate_data$sample_alt$sample_file[i]),
+      "\n")
+   cat("\n", "control file:", 
+       base::basename(fit$intermediate_data$sample_alt$ctrl_file[i]),
+       "\n")
+   HTML(cat("\n", "motif:", 
+       fit$sample_data$motif[i],
+       "\n"))
+   
+   HTML(cat("\n**Chromatograms**\n"))
+   print(plots[[fit$sample_name]][[1]])
+   print(plots[[fit$sample_name]][[2]])
+   
+  HTML(cat("<h3>", "Editing Data","</h3>", "\n"))
+   print(
+   tagList(
+    fit$sample_data %>%
+      mutate_if(is.numeric, round, digits=3) %>%
+      dplyr::select(-sample_name, -motif, -ctrl_max_base) %>%
+      DT::datatable()
+   )
+  )
+   
+  HTML(cat("<h3>", "Model parameters", "</h3>", "\n"))
+   print(
+   tagList(
+        fit$statistical_parameters %>%
+      mutate_if(is.numeric, round, digits=3) %>%
+      DT::datatable()
+   )
+  )
+   HTML("<br>")
+
+}
+
+
+```

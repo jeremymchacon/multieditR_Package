@@ -91,7 +91,8 @@ stats.tbl = get_batch_stats_table(fits)
 Or access a single fit model
 
 ```
-fit1 = fits[["Test1"]] # Test1 was a sample name in the parameters sheet
+fit1 = fits[[1]] 
+print(fit1$sample_name)
 geom_chromatogram(fit1$sample_sanger,fit1$sample_locs[1], fit1$sample_locs[2])
 ```
 

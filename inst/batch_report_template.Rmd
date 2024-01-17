@@ -68,13 +68,13 @@ for (fit in fits){
   cat(HTML(paste0("<h2>", fit$sample_name, "</h2>")), "\n")
 
   cat("\n", "sample file:", 
-      base::basename(fit$intermediate_data$sample_alt$sample_file[i]),
+      base::basename(fit$intermediate_data$sample_alt$sample_file[1]),
       "\n")
    cat("\n", "control file:", 
-       base::basename(fit$intermediate_data$sample_alt$ctrl_file[i]),
+       base::basename(fit$intermediate_data$sample_alt$ctrl_file[1]),
        "\n")
    HTML(cat("\n", "motif:", 
-       fit$sample_data$motif[i],
+       fit$sample_data$motif[1],
        "\n"))
    
    HTML(cat("\n**Chromatograms**\n"))

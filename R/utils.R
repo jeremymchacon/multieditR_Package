@@ -1,7 +1,5 @@
 
-plot.multieditR <- function(fit){
-  geom_chromatogram(fit$sample_sanger,fit$sample_locs[1], fit$sample_locs[2])
-}
+
 
 bases = c("A", "C", "G", "T")
 ACGT = bases

@@ -20,7 +20,6 @@ edit = "G"
 
 fit = detect_edits(
     # Set parameters
-  sample_name = "dem2o",
   sample_file = sample_file,
   ctrl_file = ctrl_file,
   p_value = 0.0001, 

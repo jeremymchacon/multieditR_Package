@@ -18,7 +18,6 @@ is_file_ab1 = function(filepath){
 
 detect_edits = function(
     # Set parameters
-  sample_name,
   sample_file,
   ctrl_file,
 
@@ -45,8 +44,8 @@ detect_edits = function(
       if (!is_file_ab1(sample_file)){
         stop("sample_file could not be loaded as a sanger sequence. Are you sure the file exists and is an ab1-like file?")
       }
-      if (!is_file_ab1(ctrl_file)){
-        stop("ctrl_file could not be loaded as a sanger sequence. Are you sure the file exists and is an ab1-like file?")
+      if (!use_ctrl_seq && !is_file_ab1(ctrl_file)){
+        stop("use_ctrl_seq was FALSE but ctrl_file could not be loaded as a sanger sequence. Are you sure the file exists and is an ab1-like file?")
       }
 
       # Make sangerseq objects
@@ -256,8 +255,7 @@ detect_edits = function(
       # uses the sample_null to calculate
       zaga_parameters = make_ZAGA_df(sample_null, p_adjust = p_value) %>%
         dplyr::mutate(sample_file = sample_file) %>%
-        dplyr::mutate(sample_name = sample_name) %>%
-        dplyr::select(sample_name, everything())
+        dplyr::select(everything())
 
       critical_values = zaga_parameters$crit
 
@@ -291,9 +289,9 @@ detect_edits = function(
       ctrl_chromatogram_indices = range(output_sample_alt$ctrl_index) %>% sort
 
       output_sample = output_sample_alt %>%
-        mutate(target_base = ctrl_index - ctrl_chromatogram_indices[1] + 1,
-               sample_name = sample_name) %>%
-        dplyr::select(sample_name, target_base, `motif`, ctrl_max_base, A_perc:T_perc, A_sig:T_sig, A_pvalue:T_pvalue, index, ctrl_index, sample_file)
+        mutate(target_base = ctrl_index - ctrl_chromatogram_indices[1] + 1) %>%
+        dplyr::select(target_base, `motif`, ctrl_max_base, A_perc:T_perc, A_sig:T_sig, 
+                      A_pvalue:T_pvalue, index, ctrl_index, sample_file)
 
       # output_sample_data = output_sample_alt %>%
       #   mutate(base_position = ctrl_index - ctrl_chromatogram_indices[1] + 1) %>%

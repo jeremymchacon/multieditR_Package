@@ -157,8 +157,8 @@ detect_edits = function(
       ctrl_indel = ctrl_alignment_seq %>% gregexpr("-", .) %>% unlist
 
       ### Code added 10.27.18, as when there is no indels in one sample it returned a -1 instead of 0, which introduced an error
-      if(samp_indel == -1){samp_indel = 0} else {}
-      if(ctrl_indel == -1){ctrl_indel = 0} else {}
+      if(length(samp_indel) == 1 && samp_indel == -1){samp_indel = 0}
+      if(length(ctrl_indel) == 1 && ctrl_indel == -1){ctrl_indel = 0}
 
       ctrl_df = ctrl_df %>%
         mutate(.,
@@ -213,7 +213,13 @@ detect_edits = function(
 
       # Align the motif of interest to the ctrl_seq
       motif_alignment = matchPattern(pattern = DNAString(motif), subject = DNAString(ctrl_seq), fixed = FALSE)
+
       n_alignments = motif_alignment@ranges %>% length()
+      
+      if (n_alignments == 0){
+        message("motif not found in ctrl_seq, returning NULL")
+        return(NULL)
+      }
 
       motif_positions = mapply(FUN = seq,
                                from = motif_alignment@ranges@start,

@@ -107,5 +107,6 @@ create_multieditR_report = function(batch_results, params, path = "./multieditR_
   rmarkdown::render(template,
                     params = list(params.tbl = params,
                                   results.list = batch_results),
+                    output_dir = getwd(),
                     output_file = path, envir = new.env())
 }

@@ -27,50 +27,34 @@ detect_edits = function(
   wt = "A", # Enter wt bases of interest with | separation
   edit = "G", # Enter edit of interest with | separation
   ctrl_seq_fwd = TRUE,
-  use_ctrl_seq = TRUE,
+  ctrl_is_fasta = FALSE,
   p_value = 0.01,
-  phred_cutoff = 0.001, ### 0.0001 seems good.
-  trim = TRUE,
-  boi = paste0(wt, "|", edit),
-  bases = c("A", "C", "G", "T")
-
-){
+  phred_cutoff = 0.001){
     message("initialized.")
     start = Sys.time()
     suppressWarnings({
 
+      # previously these were parameters but seem better to keep static
+      boi = paste0(wt, "|", edit)
+      bases = c("A", "C", "G", "T")
+      trim = TRUE
 
       # check files
       if (!is_file_ab1(sample_file)){
         stop("sample_file could not be loaded as a sanger sequence. Are you sure the file exists and is an ab1-like file?")
       }
-      if (!use_ctrl_seq && !is_file_ab1(ctrl_file)){
-        stop("use_ctrl_seq was FALSE but ctrl_file could not be loaded as a sanger sequence. Are you sure the file exists and is an ab1-like file?")
+      if (!ctrl_is_fasta && !is_file_ab1(ctrl_file)){
+        stop("ctrl_is_fasta was FALSE but ctrl_file could not be loaded as a sanger sequence. Are you sure the file exists and is an ab1-like file?")
       }
 
       # Make sangerseq objects
-      # Need to flesh out the TRUE statement branch
-      if(use_ctrl_seq)
-      { #input_seq = abif_to_fastq(path = ctrl_file, cutoff = phred_cutoff)$seq
-        input_seq = read_lines(ctrl_file)[2]
-        init_ctrl_seq = input_seq
-        # if(ctrl_seq_fwd){} else {init_ctrl_seq = revcom(init_ctrl_seq)}
-        ctrl_fastq = list()
-        ctrl_fastq$seq = input_seq
-        ctrl_df = data.frame(max_base = init_ctrl_seq %>% base::strsplit(., split = "") %>% unlist(),
-                             base_call = init_ctrl_seq %>% base::strsplit(., split = "") %>% unlist()) %>%
-          mutate(index = 1:NROW(max_base))
-      } else
-      {
-        # Generate ctrl sanger data frame
-        # Generate ctrl primary basecalls
-        ctrl_sanger = readsangerseq(ctrl_file)
-        ctrl_df = make_ctrl_sanger_df(ctrl_sanger)
-        init_ctrl_seq = ctrl_df$base_call %>% paste0(., collapse = "")
-        if(ctrl_seq_fwd){} else {init_ctrl_seq = revcom(init_ctrl_seq)}
-        ctrl_fastq = abif_to_fastq(path = ctrl_file, cutoff = phred_cutoff)
-      }
-
+      ctrl_info = load_ctrl_seq(ctrl_file,
+                                ctrl_is_fasta,
+                                phred_cutoff)
+      init_ctrl_seq = ctrl_info[["init_ctrl_seq"]]
+      ctrl_df = ctrl_info[["ctrl_df"]]
+      ctrl_fastq = ctrl_info[["ctrl_fastq"]]
+      ctrl_sanger = ctrl_info[["ctrl_sanger"]]
       # IF the sample needs to be reversed, then reverse complement the ctrl_seq
 
       # Make sangerseq object
@@ -81,6 +65,11 @@ detect_edits = function(
       init_sample_seq = sample_df$primary_base_call %>% paste0(., collapse = "")
       # Genereate phred scores for ctrl and samp, trimming is built in using mott's algorithm
       sample_fastq = abif_to_fastq(path = sample_file, cutoff = phred_cutoff)
+
+
+      if (is_revcom_ctrl_better(init_sample_seq, init_ctrl_seq)){
+        init_ctrl_seq = revcom(init_ctrl_seq)
+      }
 
       # Align the both the ctrl and samp to their fastq filtered sequences
       # reasonable to assume phred scored sequence will always be smaller than the primary seq
@@ -118,6 +107,9 @@ detect_edits = function(
       ### To use the context correction, would you still need to have the ctrl sequence to apply the GBM to ?
       # Align sample_seq to ctrl_seq
       trimmed_alignment = align_and_trim(sample_seq, ctrl_seq, min_continuity = 15)
+      
+      
+      
       samp_alignment_seq = trimmed_alignment$alignment@pattern %>% as.character()
       ctrl_alignment_seq = trimmed_alignment$alignment@subject %>% as.character()
 
@@ -361,4 +353,47 @@ detect_edits = function(
     })
     return(output)
 
+}
+
+load_ctrl_seq = function(ctrl_file,
+                         ctrl_is_fasta,
+                         phred_cutoff){
+  # Make sangerseq objects
+  # Need to flesh out the TRUE statement branch
+  if(ctrl_is_fasta){ 
+    input_seq = read_lines(ctrl_file)[2]
+    init_ctrl_seq = input_seq
+    ctrl_fastq = list()
+    ctrl_fastq$seq = input_seq
+    ctrl_df = data.frame(max_base = init_ctrl_seq %>% base::strsplit(., split = "") %>% unlist(),
+                         base_call = init_ctrl_seq %>% base::strsplit(., split = "") %>% unlist()) %>%
+      mutate(index = 1:NROW(max_base))
+  } else{
+    ctrl_sanger = readsangerseq(ctrl_file)
+    ctrl_df = make_ctrl_sanger_df(ctrl_sanger)
+    init_ctrl_seq = ctrl_df$base_call %>% paste0(., collapse = "")
+    ctrl_fastq = abif_to_fastq(path = ctrl_file, cutoff = phred_cutoff)
+  }
+  return(list(
+    "init_ctrl_seq" = init_ctrl_seq,
+    "ctrl_fastq" = ctrl_fastq,
+    "ctrl_df" = ctrl_df,
+    "ctrl_sanger" = ctrl_sanger
+  ))
+}
+
+is_revcom_ctrl_better = function(init_sample_seq, 
+                                 init_ctrl_seq){
+  # this takes in two DNA sequences and aligns them both ways. It returns TRUE
+  # if the alignment is superior (by score) after revcom-ing the init_ctrl_seq
+  fwd_align = align_and_trim(init_sample_seq, 
+                             init_ctrl_seq, min_continuity = 15)
+  rev_align = align_and_trim(init_sample_seq, revcom(init_ctrl_seq),min_continuity =  15)
+  if (score(rev_align$alignment) > score(fwd_align$alignment)){
+    message("control sequence aligns better to sample sequence when revcom. applying revcom to control.")
+    message(paste("fwd control alignment score:", score(fwd_align$alignment)))
+    message(paste("rev control alignment score:", score(rev_align$alignment)))
+    return(TRUE)
+  }
+  return(FALSE)
 }

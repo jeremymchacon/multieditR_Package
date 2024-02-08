@@ -51,7 +51,7 @@ detect_edits_batch = function(params = NULL){
   }
   
   if (length(class(params)) == 1 && class(params) == "character"){
-    print("params is a string, assuming it is a path to an xlsx sheet containing the parameters. attempting to load. ")
+    message("params is a string, assuming it is a path to an xlsx sheet containing the parameters. attempting to load. ")
     params = load_parameters_file(params)
   }
   
@@ -91,7 +91,7 @@ get_batch_stats_table = function(fits){
 }
 
 create_multieditR_report = function(batch_results, params, path = "./multieditR_batch_results.html"){
-  print("rendering document, this could take a couple of minutes. When it is done, open the html in a web browser.")
+  message("rendering document, this could take a couple of minutes. When it is done, open the html in a web browser.")
   template = paste0(system.file(package = "multieditR"), "/batch_report_template.Rmd")
   rmarkdown::render(template,
                     params = list(params.tbl = params,

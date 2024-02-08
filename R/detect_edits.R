@@ -27,7 +27,6 @@ detect_edits = function(
   wt = "A", # Enter wt bases of interest with | separation
   edit = "G", # Enter edit of interest with | separation
   ctrl_seq_fwd = TRUE,
-  ctrl_is_fasta = FALSE,
   p_value = 0.01,
   phred_cutoff = 0.001){
     message("initialized.")
@@ -43,8 +42,9 @@ detect_edits = function(
       if (!is_file_ab1(sample_file)){
         stop("sample_file could not be loaded as a sanger sequence. Are you sure the file exists and is an ab1-like file?")
       }
-      if (!ctrl_is_fasta && !is_file_ab1(ctrl_file)){
-        stop("ctrl_is_fasta was FALSE but ctrl_file could not be loaded as a sanger sequence. Are you sure the file exists and is an ab1-like file?")
+      ctrl_is_fasta = FALSE
+      if (!is_file_ab1(ctrl_file)){
+        ctrl_is_fasta = TRUE
       }
 
       # Make sangerseq objects
@@ -368,6 +368,7 @@ load_ctrl_seq = function(ctrl_file,
     ctrl_df = data.frame(max_base = init_ctrl_seq %>% base::strsplit(., split = "") %>% unlist(),
                          base_call = init_ctrl_seq %>% base::strsplit(., split = "") %>% unlist()) %>%
       mutate(index = 1:NROW(max_base))
+    ctrl_sanger = NULL
   } else{
     ctrl_sanger = readsangerseq(ctrl_file)
     ctrl_df = make_ctrl_sanger_df(ctrl_sanger)

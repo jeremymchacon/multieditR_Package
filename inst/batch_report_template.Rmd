@@ -40,7 +40,7 @@ DT::datatable(params$params.tbl)
 
 # Individual Results
 
-```{r, results="asis", echo = FALSE, message = FALSE}
+```{r, results="asis", echo = FALSE, message = FALSE, warning=FALSE}
 library(htmltools)
 #params.tbl = params$params.tbl
 fits = params$results.list
@@ -54,6 +54,9 @@ cat("  ")
 # pre-making plots is important to not cause race conditions
 plots = list()
 for (fit in fits){
+    if (!fit$completed){
+    next
+  }
   plt1 =  geom_chromatogram(fit$sample_sanger,fit$sample_locs[1], fit$sample_locs[2])
    if ( is.null(fit$ctrl_sanger)){
      plt2 = "control sequence was not an ab1, so no chromatogram"
@@ -66,6 +69,12 @@ for (fit in fits){
 # here the actual rendering is done
 for (fit in fits){
   cat(HTML(paste0("<h2>", fit$sample_name, "</h2>")), "\n")
+  
+  if (!fit$completed){
+    cat("\n", "Sample failed, likely due to low quality in Sanger sequence",
+        "\n", "error message: ",fit$error$message)
+    next
+  }
 
   cat("\n", "sample file:", 
       base::basename(fit$intermediate_data$sample_alt$sample_file[1]),

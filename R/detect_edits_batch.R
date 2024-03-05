@@ -57,24 +57,34 @@ detect_edits_batch = function(params = NULL){
   
   fits = lapply(1:nrow(params),
                 FUN = function(i){
-                  fit = detect_edits(sample_file = params$sample_file[i],
-                                     ctrl_file = params$ctrl_file[i],
-                                     motif = params$motif[i],
-                                     wt = params$wt[i],
-                                     edit = params$edit[i],
-                                     motif_fwd = ifelse(is.null(params$motif_fwd[i]), TRUE, params$motif_fwd[i]),
-                                     p_value = ifelse(is.null(params$p_value[i]), 0.01, params$p_value[i]),
-                                     phred_cutoff = ifelse(is.null(params$phred_cutoff[i]), 0.001, params$phred_cutoff[i])
-                                     )
-                  fit$sample_data$sample_name = params$sample_name[i]
-                  fit$statistical_parameters$sample_name = params$sample_name[i]
-                  fit$sample_name = params$sample_name[i]
-                  fit
+                  tryCatch({
+                    fit = detect_edits(sample_file = params$sample_file[i],
+                                       ctrl_file = params$ctrl_file[i],
+                                       motif = params$motif[i],
+                                       wt = params$wt[i],
+                                       edit = params$edit[i],
+                                       motif_fwd = ifelse(is.null(params$motif_fwd[i]), TRUE, params$motif_fwd[i]),
+                                       p_value = ifelse(is.null(params$p_value[i]), 0.01, params$p_value[i]),
+                                       phred_cutoff = ifelse(is.null(params$phred_cutoff[i]), 0.001, params$phred_cutoff[i])
+                                       )
+                    fit$sample_data$sample_name = params$sample_name[i]
+                    fit$statistical_parameters$sample_name = params$sample_name[i]
+                    fit$sample_name = params$sample_name[i]
+                    fit$completed = TRUE
+                    fit
+                    },
+                    error = function(e){
+                      list(sample_name = params$sample_name[i],
+                           completed = FALSE,
+                           error = e)
+                    })
                  })
   fits
 }  
 
 get_batch_results_table = function(fits){
+  # toss fits which failed
+  fits = fits[sapply(fits, FUN = function(x){x$completed})]
   fits %>% lapply(., "[[", 1) %>%
     plyr::ldply(., "tibble") %>%
     select(sample_name, target_base, motif, ctrl_max_base, A_perc, C_perc, G_perc, T_perc,
@@ -83,6 +93,8 @@ get_batch_results_table = function(fits){
 }
 
 get_batch_stats_table = function(fits){
+  # toss fits which failed
+  fits = fits[sapply(fits, FUN = function(x){x$completed})]
   fits %>% lapply(., "[[", 2) %>%
     plyr::ldply(., "tibble") %>%
     mutate(base = paste0(base, " fillibens coef.")) %>%

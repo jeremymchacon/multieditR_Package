@@ -1,5 +1,13 @@
+# utils.R
 
-
+###########################################################################################
+# Written by Jeremy Chacon and Mitchell Kluesner
+#  
+# This file is part of multiEditR (Multiple Edit Deconvolution by Inference of Traces in R)
+# 
+# Please only copy and/or distribute this script with proper citation of 
+# multiEditR publication
+###########################################################################################
 
 bases = c("A", "C", "G", "T")
 ACGT = bases

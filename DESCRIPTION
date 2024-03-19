@@ -1,4 +1,4 @@
-Package: multieditR
+Package: multiEditR
 Type: Package
 Title: multEditR Detects Base Edits from Sanger Sequencing Data
 Version: 0.1.0

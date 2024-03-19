@@ -14,19 +14,19 @@ To install, first you must have devtools:
 install.packages("devtools")
 ```
 
-Then, use devtools to install the multieditR package:
+Then, use devtools to install the multiEditR package:
 
 ```
-devtools::install_github("MoriarityLab/multiEditR.pkg")
+devtools::install_github("MoriarityLab/multiEditR.pckg")
 ```
 
 ## Basic functionality:
 
 Here, we load in two example sanger sequences, then detect whether "A" bases were edited within the motif "AGTAGCTGGGATTACAGATG" using detect_edits(), the main function of the package. 
 ```
-library(multiEditR.pkg)
-sample_file = system.file("extdata", "RP272_cdna_wt.ab1", package="multieditR")
-ctrl_file = system.file("extdata", "RP272_cdna_ko.ab1", package="multieditR")
+library(multiEditR.pckg)
+sample_file = system.file("extdata", "RP272_cdna_wt.ab1", package="multiEditR")
+ctrl_file = system.file("extdata", "RP272_cdna_ko.ab1", package="multiEditR")
 motif = "AGTAGCTGGGATTACAGATG"
 wt = "A"
 edit = "G"

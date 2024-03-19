@@ -1,4 +1,4 @@
-## Repository for the multieditR package 
+## Repository for the multiEditR package 
 
 multiEditR detects and quantifies base edits from Sanger sequencing. Algorithms were developed by Mitch Kluesner, and implemented by Jeremy Chacón. 
 

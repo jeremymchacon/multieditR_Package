@@ -1,8 +1,8 @@
 ## Repository for the multieditR package 
 
-multiEditR helps identify edits from Sanger Sequences. The algorithms were developed by Mitch Kluesner, and put into this R package by Jeremy Chacón. 
+multiEditR detects and quantifies base edits from Sanger sequencing. Algorithms were developed by Mitch Kluesner, and implemented by Jeremy Chacón. 
 
-It can take as input a sample Sanger sequence, and either a control Sanger or fasta file, a motif within which to look for edits, the base being edited and expected edited base, and return whether edits were found.
+multiEditR inputs a sample Sanger sequence, and either a control Sanger or fasta file, a motif within which to look for edits, the base being edited and expected edited base, and return whether edits were found.
 
 Furthermore, if the control sequence is rev-com from the sample sequence, this package detects that and rev-coms the control sequence prior to testing.
 
@@ -17,14 +17,14 @@ install.packages("devtools")
 Then, use devtools to install the multieditR package:
 
 ```
-devtools::install_github("jeremymchacon/multieditR")
+devtools::install_github("MoriarityLab/multiEditR.pkg")
 ```
 
 ## Basic functionality:
 
 Here, we load in two example sanger sequences, then detect whether "A" bases were edited within the motif "AGTAGCTGGGATTACAGATG" using detect_edits(), the main function of the package. 
 ```
-library(multieditR)
+library(multiEditR.pkg)
 sample_file = system.file("extdata", "RP272_cdna_wt.ab1", package="multieditR")
 ctrl_file = system.file("extdata", "RP272_cdna_ko.ab1", package="multieditR")
 motif = "AGTAGCTGGGATTACAGATG"

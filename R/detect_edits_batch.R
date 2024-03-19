@@ -17,8 +17,8 @@ load_parameters_file = function(path){
 }
 
 load_example_params = function(){
-  params = load_parameters_file(paste0(system.file("extdata", package = "multieditR"), "/parameters.xlsx"))
-  ext_path = system.file("extdata", package = "multieditR")
+  params = load_parameters_file(paste0(system.file("extdata", package = "multiEditR"), "/parameters.xlsx"))
+  ext_path = system.file("extdata", package = "multiEditR")
   params$sample_file = paste0(ext_path, "/", params$sample_file)
   params$ctrl_file = paste0(ext_path, "/", params$ctrl_file)
   params
@@ -112,9 +112,9 @@ get_batch_stats_table = function(fits){
     pivot_wider(names_from = base, values_from = fillibens)
 }
 
-create_multieditR_report = function(batch_results, params, path = "./multieditR_batch_results.html"){
+create_multiEditR_report = function(batch_results, params, path = "./multiEditR_batch_results.html"){
   message("rendering document, this could take a couple of minutes. When it is done, open the html in a web browser.")
-  template = paste0(system.file(package = "multieditR"), "/batch_report_template.Rmd")
+  template = paste0(system.file(package = "multiEditR"), "/batch_report_template.Rmd")
   rmarkdown::render(template,
                     params = list(params.tbl = params,
                                   results.list = batch_results),

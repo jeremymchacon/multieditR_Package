@@ -1,6 +1,6 @@
 ## Repository for the multieditR package 
 
-multiEditR helps identify edits from Sanger Sequences. The algorithms were developed by Mitch Kleusner, and put into this R package by Jeremy Chacón. 
+multiEditR helps identify edits from Sanger Sequences. The algorithms were developed by Mitch Kluesner, and put into this R package by Jeremy Chacón. 
 
 It can take as input a sample Sanger sequence, and either a control Sanger or fasta file, a motif within which to look for edits, the base being edited and expected edited base, and return whether edits were found.
 

@@ -108,7 +108,7 @@ geom_chromatogram(fit1$sample_sanger,fit1$sample_locs[1], fit1$sample_locs[2])
 Or make a report containing results from all of the samples:
 
 ```
-create_multieditR_report(fits, params, "my_html_report.html")
+create_multiEditR_report(fits, params, "my_html_report.html")
 ```
 
 Known issues:

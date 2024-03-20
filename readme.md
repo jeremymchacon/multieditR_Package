@@ -24,7 +24,7 @@ devtools::install_github("MoriarityLab/multiEditR.pckg")
 
 Here, we load in two example sanger sequences, then detect whether "A" bases were edited within the motif "AGTAGCTGGGATTACAGATG" using detect_edits(), the main function of the package. 
 ```
-library(multiEditR.pckg)
+library(multiEditR)
 sample_file = system.file("extdata", "RP272_cdna_wt.ab1", package="multiEditR")
 ctrl_file = system.file("extdata", "RP272_cdna_ko.ab1", package="multiEditR")
 motif = "AGTAGCTGGGATTACAGATG"
@@ -106,8 +106,11 @@ geom_chromatogram(fit1$sample_sanger,fit1$sample_locs[1], fit1$sample_locs[2])
 ```
 
 Or make a report containing results from all of the samples:
-
 ```
+# First set your directory or interest:
+setwd("your/directory/of/interest/to/write/files")
+
+# Run the report, which may take a few minutes
 create_multiEditR_report(fits, params, "my_html_report.html")
 ```
 

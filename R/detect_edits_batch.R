@@ -97,7 +97,7 @@ get_batch_results_table = function(fits){
   fits = fits[sapply(fits, FUN = function(x){x$completed})]
   fits %>% lapply(., "[[", 1) %>%
     plyr::ldply(., "tibble") %>%
-    select(sample_name, target_base, motif, ctrl_max_base, A_perc, C_perc, G_perc, T_perc,
+    dplyr::select(sample_name, target_base, motif, ctrl_max_base, A_perc, C_perc, G_perc, T_perc,
            A_sig, C_sig, G_sig, T_sig, A_pvalue, C_pvalue, G_pvalue, T_pvalue, index, ctrl_index,
            sample_file)
 }

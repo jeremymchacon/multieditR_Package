@@ -83,9 +83,6 @@ detect_edits = function(
       # Genereate phred scores for ctrl and samp, trimming is built in using mott's algorithm
       sample_fastq = abif_to_fastq(path = sample_file, cutoff = phred_cutoff)
 
-
-
-
       # Align the both the ctrl and samp to their fastq filtered sequences
       # reasonable to assume phred scored sequence will always be smaller than the primary seq
       # use high gap penalty to force SNP alignment
@@ -218,16 +215,25 @@ detect_edits = function(
       # Reverse complement motif if needed
       if(motif_fwd){}else{motif = revcom(motif)}
 
-      # Align the motif of interest to the ctrl_seq
-      motif_alignment = matchPattern(pattern = DNAString(motif), subject = DNAString(ctrl_seq), fixed = FALSE)
-
+      # Align the motif of interest to the ctrl_seq and check if the motif can be found
+      motif_alignment = matchPattern(pattern = DNAString(motif), 
+                                     subject = DNAString(ctrl_df_seq), fixed = FALSE)
       n_alignments = motif_alignment@ranges %>% length()
-      
       if (n_alignments == 0){
-        message("motif not found in ctrl_seq, returning NULL")
-        return(NULL)
+        stop("motif not found in control sequence. are you sure you have motif_fwd correct?")
+        #return(NULL)
       }
-
+      # repeat for sample
+      motif_samp_alignments = countPattern(DNAString(motif), 
+                                           DNAString(samp_df_seq), 
+                                           max.mismatch = 4)
+      if (motif_samp_alignments == 0){
+        stop("motif not found in sample sequence with up to 4 allowed mismatches. Are you sure you have motif_fwd correct?")
+        #message("are you sure you have motif_fwd correct?")
+        #return(NULL)
+      }
+      
+      
       motif_positions = mapply(FUN = seq,
                                from = motif_alignment@ranges@start,
                                to = (motif_alignment@ranges@start + nchar(motif) - 1)) %>% as.vector()

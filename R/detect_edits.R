@@ -370,7 +370,8 @@ load_ctrl_seq = function(ctrl_file,
   # Make sangerseq objects
   # Need to flesh out the TRUE statement branch
   if(ctrl_is_fasta){ 
-    input_seq = read_lines(ctrl_file)[2]
+    fasta_lines = read_lines(ctrl_file)
+    input_seq = paste0(fasta_lines[2:length(fasta_lines)], collapse = "")
     init_ctrl_seq = input_seq
     ctrl_fastq = list()
     ctrl_fastq$seq = input_seq

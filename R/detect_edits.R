@@ -60,11 +60,19 @@ detect_edits = function(
       ctrl_info = load_ctrl_seq(ctrl_file,
                                 ctrl_is_fasta,
                                 phred_cutoff)
+      # temporarily read the sample sanger to check if we need to revcom
+      sample_sanger = readsangerseq(sample_file)
+      init_sample_seq = primarySeq(sample_sanger)
+      # IF the sample needs to be reversed, then reverse complement the ctrl_seq
+      if (is_revcom_ctrl_better(init_sample_seq, ctrl_info$init_ctrl_seq)){
+        ctrl_info = reverse_ctrl_df(ctrl_info)
+        message("control aligns better to sample when rev-com. Applying revcom to control. Setting control sanger to NULL because it cannot be revcom")
+        ctrl_info$ctrl_sanger = NULL
+      }
       init_ctrl_seq = ctrl_info[["init_ctrl_seq"]]
       ctrl_df = ctrl_info[["ctrl_df"]]
       ctrl_fastq = ctrl_info[["ctrl_fastq"]]
       ctrl_sanger = ctrl_info[["ctrl_sanger"]]
-      # IF the sample needs to be reversed, then reverse complement the ctrl_seq
 
       # Make sangerseq object
       # Generate samp sanger data frame
@@ -76,9 +84,7 @@ detect_edits = function(
       sample_fastq = abif_to_fastq(path = sample_file, cutoff = phred_cutoff)
 
 
-      if (is_revcom_ctrl_better(init_sample_seq, init_ctrl_seq)){
-        init_ctrl_seq = revcom(init_ctrl_seq)
-      }
+
 
       # Align the both the ctrl and samp to their fastq filtered sequences
       # reasonable to assume phred scored sequence will always be smaller than the primary seq
@@ -393,18 +399,42 @@ load_ctrl_seq = function(ctrl_file,
   ))
 }
 
-is_revcom_ctrl_better = function(init_sample_seq, 
-                                 init_ctrl_seq){
-  # this takes in two DNA sequences and aligns them both ways. It returns TRUE
-  # if the alignment is superior (by score) after revcom-ing the init_ctrl_seq
-  fwd_align = align_and_trim(init_sample_seq, 
-                             init_ctrl_seq, min_continuity = 15)
-  rev_align = align_and_trim(init_sample_seq, revcom(init_ctrl_seq),min_continuity =  15)
-  if (score(rev_align$alignment) > score(fwd_align$alignment)){
-    message("control sequence aligns better to sample sequence when revcom. applying revcom to control.")
-    message(paste("fwd control alignment score:", score(fwd_align$alignment)))
-    message(paste("rev control alignment score:", score(rev_align$alignment)))
-    return(TRUE)
-  }
-  return(FALSE)
+reverse_ctrl_df = function(ctrl_df){
+  # Note: this doesn't reverse the actual sanger seq, as I don't 
+  # think that is easily possible
+  ctrl_df$init_ctrl_seq = revcom(ctrl_df$init_ctrl_seq)
+  ctrl_df$ctrl_fastq$seq = revcom(ctrl_df$ctrl_fastq$seq)
+  ctrl_df$ctrl_df$orig_index = ctrl_df$ctrl_df$index
+  ctrl_df$ctrl_df$index = (1 + max(ctrl_df$ctrl_df$index)) - ctrl_df$ctrl_df$index
+  ctrl_df$ctrl_df$max_base = unname(sapply(ctrl_df$ctrl_df$max_base, FUN = revcom))
+  ctrl_df$ctrl_df$base_call = unname(sapply(ctrl_df$ctrl_df$base_call, FUN = revcom))
+  
+  ctrl_df$ctrl_df = arrange(ctrl_df$ctrl_df, index)
+  ctrl_df
 }
+
+is_revcom_ctrl_better = function(init_sample_seq,
+                                 init_ctrl_seq){
+  init_sample_seq = as.character(init_sample_seq)
+  init_ctrl_seq = as.character(init_ctrl_seq)
+  fwd_score = score(pairwiseAlignment(init_sample_seq, init_ctrl_seq))
+  rev_score = score(pairwiseAlignment(init_sample_seq, 
+                                      revcom(init_ctrl_seq)))
+  return(rev_score > fwd_score)
+}
+
+# is_revcom_ctrl_better = function(init_sample_seq, 
+#                                  init_ctrl_seq){
+#   # this takes in two DNA sequences and aligns them both ways. It returns TRUE
+#   # if the alignment is superior (by score) after revcom-ing the init_ctrl_seq
+#   fwd_align = align_and_trim(init_sample_seq, 
+#                              init_ctrl_seq, min_continuity = 15)
+#   rev_align = align_and_trim(init_sample_seq, revcom(init_ctrl_seq),min_continuity =  15)
+#   if (score(rev_align$alignment) > score(fwd_align$alignment)){
+#     message("control sequence aligns better to sample sequence when revcom. applying revcom to control.")
+#     message(paste("fwd control alignment score:", score(fwd_align$alignment)))
+#     message(paste("rev control alignment score:", score(rev_align$alignment)))
+#     return(TRUE)
+#   }
+#   return(FALSE)
+# }

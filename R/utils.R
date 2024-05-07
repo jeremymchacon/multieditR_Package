@@ -625,3 +625,225 @@ geom_chromatogram = function(sanger, start_index, end_index){
 
   return(chromatogram)
 }
+
+plot_chromatogram_at_motif = function(sanger, motif, 
+                                      sanger_fwd = TRUE,
+                                      motif_fwd = TRUE){
+  library(sangerseqR)
+  library(stringr)
+  sanger_to_df = function(sanger){
+    # Takes a sanger object and turns it into a wide-format dataframe
+    # that has the peak values for each called base / position
+    sanger %>%
+      makeBaseCalls() %>%
+      peakAmpMatrix() %>%
+      as.data.frame() %>%
+      rename(A = V1,C = V2, G = V3,`T` = V4) %>%
+      tibble::rowid_to_column() %>%
+      left_join(x = ., y = (
+        pivot_longer(., -rowid, names_to = "base", values_to = "peak") %>%
+          group_by(rowid) %>%
+          filter(peak == max(peak)[1]) %>%
+          mutate(base_called = base) %>%
+          select(rowid, base_called, peak)
+      )
+      )
+  }
+  
+  get_motif_locs = function(sanger, motif, sanger_fwd = TRUE){
+    sanger_sequence = sanger_to_df(sanger) %>%
+      pull(base_called) %>%
+      paste(., collapse = "") %>%
+      DNAString()
+    
+    if (!sanger_fwd){
+      sanger_sequence = reverseComplement(sanger_sequence)
+    }
+    
+    motif_alignment = matchPattern(pattern = DNAString(motif), 
+                                   subject = sanger_sequence, 
+                                   max.mismatch = 4)
+    c("motif_start" = motif_alignment@ranges@start,
+      "motif_end" = motif_alignment@ranges@start + nchar(motif))
+    }
+  
+  if (!motif_fwd){
+    motif = as.character(reverseComplement(DNAString(motif)))
+  }
+  
+  motif_positions = get_motif_locs(sanger, motif, sanger_fwd = sanger_fwd)
+  
+  sanger_peaks = sanger_to_df(sanger)
+  
+  if (!sanger_fwd){
+    sanger_peaks$orig_rowid = sanger_peaks$rowid
+    sanger_peaks$rowid = 2 +  max(sanger_peaks$orig_rowid) - sanger_peaks$orig_rowid
+    sanger_peaks$orig_base = sanger_peaks$base_called
+    sanger_peaks$base_called = case_when(
+      sanger_peaks$orig_base == "A" ~ "T",
+      sanger_peaks$orig_base == "T" ~ "A",
+      sanger_peaks$orig_base == "C" ~ "G",
+      sanger_peaks$orig_base == "G" ~ "C"
+    )
+    sanger_peaks = sanger_peaks %>%
+      rename(orig_A = A,
+             orig_C = C,
+             orig_T = `T`,
+             orig_G = G) %>%
+      mutate(A = orig_T,
+             C = orig_G,
+             `T` = orig_A,
+             G = orig_C)
+  }
+
+  
+  # check for motif offset -- for some reason SOMETIMES we're offset by one
+  sanger_locs = sanger_peaks %>%
+    filter(rowid >= motif_positions[["motif_start"]],
+           rowid < motif_positions[["motif_end"]]) %>%
+    arrange(rowid)
+  hits_center = 0
+  hits_back = 0
+  hits_fwd = 0
+  motif_chars = str_split(motif, "")[[1]]
+  for (i in 2:(nrow(sanger_locs)-1)){
+    if (sanger_locs$base_called[i] == motif_chars[i]){
+      hits_center = hits_center + 1
+    }
+    if (sanger_locs$base_called[i+1] == motif_chars[i]){
+      hits_back = hits_back + 1
+    }
+    if (sanger_locs$base_called[i-1] == motif_chars[i]){
+      hits_fwd = hits_fwd + 1
+    }
+  }
+  if (hits_fwd == max(c(hits_back, hits_center, hits_fwd))){
+    motif_positions = motif_positions - 1
+  }else if(hits_back == max(c(hits_back, hits_center, hits_fwd))){
+    motif_positions = motif_positions + 1
+  }
+  
+  # we use those locations to rearrange peak_mat
+  sanger_peaks_at_motif = sanger_peaks %>%
+    filter(rowid >= motif_positions[["motif_start"]],
+           rowid < motif_positions[["motif_end"]]) %>%
+    mutate(motif_pos = if(sanger_fwd){
+      1:nrow(.) - 0.5
+    }
+    else{
+      rev(1:nrow(.)) - 0.5
+    }) %>%
+    select(-rowid, - peak) %>%
+    pivot_longer(c(A,C,`T`,G),
+                 names_to = "base", values_to = "peak") %>%
+    group_by(motif_pos) %>%
+    mutate(peak_percent = as.character(round(100*peak/sum(peak)))) %>%
+    ungroup() %>%
+    mutate(base_pos = case_when(base == "A" ~ -1/8, base == "C" ~ -2/8,
+                                base == "G" ~ -3/8, base == "T" ~ -4/8)) 
+  
+  # peakPosMatrix tells us where the peaks for the motif start and end
+  trace_ends = peakPosMatrix(makeBaseCalls(sanger)) %>% 
+    as.data.frame() %>%
+    mutate(base_position = if(sanger_fwd){
+      1:nrow(.)
+    }else{
+      1 + rev(1:nrow(.))
+    }) %>%
+    pivot_longer(-base_position, names_to = "base", values_to = "rowid") %>%
+    filter(!is.na(rowid)) %>%
+    filter(base_position %in% c(motif_positions[["motif_start"]], 
+                                motif_positions[["motif_end"]]-1)) %>%
+    pull(rowid) %>% sort
+  # sometimes there are two rowid's per base position
+  trace_ends = c(min(trace_ends), max(trace_ends))
+  
+  
+  
+  # establish the colors in the fill_key to use a character set for the 
+  # tile AND trace colors
+  fill_colors = c(rep("#FFFFFF",7),
+                  colorRampPalette(colors = c("white", "#e41a1c"))(13),
+                  colorRampPalette(colors = c("#e41a1c", "#e41a1c"))(30),
+                  colorRampPalette(colors = c("#e41a1c", "#377eb8"))(51),
+                  "#32CD32", "#4169E1", "#121212", "#FC4338")
+  names(fill_colors) = c(0:6, 7:19, 20:49, 50:100, 1000, 2000, 3000, 4000)
+  
+  #### We plot the raw trace which has been subsetted to just the motif locations
+  
+  traceMatrix(makeBaseCalls(sanger)) %>%
+    as.data.frame() %>%
+    rename(A = V1, C = V2, G = V3, `T` = V4) %>%
+    mutate(rowid = if(sanger_fwd){
+      1:nrow(.)
+    }else{
+      1:nrow(.)
+    }) %>%
+    pivot_longer(-rowid, names_to = "base", values_to = "peak") %>%
+    mutate(base = if(sanger_fwd){
+      base
+    }else{
+      case_when(base == "A" ~ "T", base == "T" ~ "A", base == "C" ~ "G", base == "G" ~ "C")
+    }) %>%
+    mutate(base_fill_code = case_when(base == "A" ~ "1000", base == "C" ~ "2000",
+                                      base == "G" ~ "3000", base == "T" ~ "4000")) %>%
+    filter(rowid >= trace_ends[1] - 5,
+           rowid <= trace_ends[2] + 5) %>%
+    mutate(rowpos = nchar(motif) * (rowid - min(rowid)) / (max(rowid) - min(rowid))) %>%
+    mutate(rowpos = if(sanger_fwd){
+      rowpos
+    }else{
+      rev(rowpos)
+    }) %>%
+    group_by(base) %>%
+    mutate(trace = peak / max(peak)+1/16) %>%
+    ungroup() %>%
+    ggplot(aes(x = rowpos, ymin = 1/16, ymax = trace, 
+               color =base, fill = base_fill_code))+
+    geom_ribbon(alpha = 0.1)+
+    scale_color_manual(values = c("A" = "#4daf4a", "C" = "#377eb8", "G" = "black", "T" = "#e41a1c"))+
+    geom_tile(data = sanger_peaks_at_motif,
+              inherit.aes = FALSE,
+              aes(x = motif_pos, y = base_pos,  fill = peak_percent),
+              color = "black")+
+    geom_text(data = sanger_peaks_at_motif,
+              inherit.aes = FALSE, color = "black",
+              aes(x = motif_pos, y = base_pos, label = peak_percent))+
+    scale_fill_manual(values = fill_colors)+
+    theme_void()+
+    theme(legend.position = "none",
+          aspect.ratio = 1/1.5)+
+    annotate("text", x = -0.5, y = -c(1:4)/8, label = c("A","C","G","T"))+
+    annotate("text", x = 1:nchar(motif)-0.5, y = -0, 
+             label = str_split(motif, "")[[1]])+
+    annotate("text", x = 1:nchar(motif)-0.5, y = -5/8, 
+             label = if (motif_fwd){
+               as.character(1:nchar(motif))
+             }else{
+               as.character(rev(1:nchar(motif)))
+             }
+    )
+}
+
+
+
+plot_sample_chromatogram = function(fit){
+  motif = fit$motif
+  motif_fwd = fit$motif_fwd
+  plot_chromatogram_at_motif(fit$sample_sanger, motif, motif_fwd = motif_fwd)
+}
+plot_control_chromatogram = function(fit){
+  if (str_detect(fit$intermediate_data$sample_alt$ctrl_file[1], "\\.fa")){
+    message("control was not .ab1, returning empty ggplot")
+    return(ggplot()+
+             theme_void()+
+             theme(aspect.ratio = 1/1.5)+
+             annotate("text", x = 0, y = 0, label = "control not .ab1"))
+  }
+  motif = fit$motif
+  motif_fwd = fit$motif_fwd
+  control_fwd = !fit$ctrl_is_revcom
+  plot_chromatogram_at_motif(fit$ctrl_sanger, motif,
+                             sanger_fwd = control_fwd,
+                             motif_fwd = motif_fwd)
+}

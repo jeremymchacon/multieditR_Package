@@ -57,12 +57,8 @@ for (fit in fits){
     if (!fit$completed){
     next
   }
-  plt1 =  geom_chromatogram(fit$sample_sanger,fit$sample_locs[1], fit$sample_locs[2])
-   if ( is.null(fit$ctrl_sanger)){
-     plt2 = "control sequence was not an ab1, so no chromatogram"
-   }else{
-     plt2 = geom_chromatogram(fit$ctrl_sanger,fit$ctrl_locs[1], fit$ctrl_locs[2])
-   }
+  plt1 =  plot_sample_chromatogram(fit)
+  plt2 = plot_control_chromatogram(fit)
  plots[[fit$sample_name]] =  list(plt1, plt2)
 }
 
@@ -83,7 +79,7 @@ for (fit in fits){
        base::basename(fit$intermediate_data$sample_alt$ctrl_file[1]),
        "\n")
    HTML(cat("\n", "motif:", 
-       fit$sample_data$motif[1],
+       fit$motif,
        "\n"))
    
    HTML(cat("\n**Chromatograms**\n"))

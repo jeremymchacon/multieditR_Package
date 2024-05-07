@@ -48,10 +48,11 @@ detect_edits = function(
       sample_sanger = readsangerseq(sample_file)
       init_sample_seq = primarySeq(sample_sanger)
       # IF the sample needs to be reversed, then reverse complement the ctrl_seq
+      ctrl_is_revcom = FALSE
       if (is_revcom_ctrl_better(init_sample_seq, ctrl_info$init_ctrl_seq)){
         ctrl_info = reverse_ctrl_df(ctrl_info)
         message("control aligns better to sample when rev-com. Applying revcom to control. Setting control sanger to NULL because it cannot be revcom")
-        ctrl_info$ctrl_sanger = NULL
+        ctrl_is_revcom = TRUE
       }
       init_ctrl_seq = ctrl_info[["init_ctrl_seq"]]
       ctrl_df = ctrl_info[["ctrl_df"]]
@@ -190,6 +191,7 @@ detect_edits = function(
       # Could take the post_aligned_index from ctrl and apply it to the sample
 
       # Reverse complement motif if needed
+      motif_orig = motif
       if(motif_fwd){}else{motif = revcom(motif)}
 
       # Align the motif of interest to the ctrl_seq and check if the motif can be found
@@ -317,10 +319,9 @@ detect_edits = function(
         "sample_fastq" = sample_fastq,
         "ctrl_sanger" = ctrl_sanger,
         "ctrl_fastq" = ctrl_fastq,
-        "sample_locs" = c(sample_chromatogram_indices[1],
-                          sample_chromatogram_indices[1] + nchar(motif) + 1),
-        "ctrl_locs" = c(ctrl_chromatogram_indices[1],
-                        ctrl_chromatogram_indices[1] + nchar(motif) + 1),
+        "ctrl_is_revcom" = ctrl_is_revcom, 
+        "motif" = motif_orig,
+        "motif_fwd" = motif_fwd,
         "intermediate_data" = list("raw_sample_df"=raw_sample_df,
                                  "sample_alt"=sample_alt,
                                  "pre_cross_align_sample_df"=pre_cross_align_sample_df,

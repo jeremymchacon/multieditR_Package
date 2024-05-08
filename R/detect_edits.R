@@ -27,7 +27,11 @@ detect_edits = function(
     suppressWarnings({
 
       # previously these were parameters but seem better to keep static
-      boi = paste0(wt, "|", edit)
+      if (motif_fwd){
+        boi = paste0(wt, "|", edit)
+      }else{
+        boi = paste0(revcom(wt), "|", revcom(edit))
+      }
       bases = c("A", "C", "G", "T")
       trim = TRUE
 
@@ -192,7 +196,11 @@ detect_edits = function(
 
       # Reverse complement motif if needed
       motif_orig = motif
-      if(motif_fwd){}else{motif = revcom(motif)}
+      if(motif_fwd){}else{
+        motif = revcom(motif)
+        wt = revcom(wt)
+        edit = revcom(edit)
+        }
 
       # Align the motif of interest to the ctrl_seq and check if the motif can be found
       motif_alignment = matchPattern(pattern = DNAString(motif), 
@@ -214,6 +222,9 @@ detect_edits = function(
                                from = motif_alignment@ranges@start,
                                to = (motif_alignment@ranges@start + nchar(motif) - 1)) %>% as.vector()
       names(motif_positions) = rep(x = c(1:n_alignments), each = nchar(motif))
+      if (!motif_fwd){
+        motif_positions = motif_positions + 1
+      }
 
       # Append the sequences from the ctrl df to the sample df
       sample_df %<>% mutate(ctrl_max_base = ctrl_df$max_base, ctrl_base_call = ctrl_df$base_call)
@@ -274,13 +285,17 @@ detect_edits = function(
         dplyr::select(-EI_base)
 
       # define control chromatogram indices to set base position
-      sample_chromatogram_indices = range(output_sample_alt$index) %>% sort
-      ctrl_chromatogram_indices = range(output_sample_alt$ctrl_index) %>% sort
+      sample_chromatogram_indices = range(sample_alt$index) %>% sort
+      ctrl_chromatogram_indices = range(sample_alt$ctrl_index) %>% sort
 
       output_sample = output_sample_alt %>%
-        mutate(target_base = ctrl_index - ctrl_chromatogram_indices[1] + 1) %>%
-        dplyr::select(target_base, `motif`, ctrl_max_base, A_perc:T_perc, A_sig:T_sig, 
-                      A_pvalue:T_pvalue, index, ctrl_index, sample_file)
+        mutate(target_base = if (motif_fwd){
+          index - sample_chromatogram_indices[1] + 1
+          }else{
+            nchar(motif_orig) - (index - sample_chromatogram_indices[1]) - 1
+          }) %>%
+        dplyr::select(target_base, `motif`, ctrl_max_base,max_base, A_perc:T_perc, A_sig:T_sig, 
+                     A_pvalue:T_pvalue, index, ctrl_index, sample_file)
 
       output_sample_null = sample_null %>%
         dplyr::select(ctrl_index, ctrl_max_base, max_base, A_area:T_area, A_perc:T_perc) %>%
@@ -422,3 +437,4 @@ is_file_ab1 = function(filepath){
     })
   return(result)
 }
+

@@ -47,10 +47,10 @@ After fitting is complete, multiple graphs and tables can be made:
 ```
 
 # chromatogram of predicted edits in sample
-geom_chromatogram(fit$sample_sanger,fit$sample_locs[1], fit$sample_locs[2])
+plot_sample_chromatogram(fit)
 
 # chromatogram of predicts "edits" in control
-geom_chromatogram(fit$ctrl_sanger,fit$ctrl_locs[1], fit$ctrl_locs[2])
+plot_control_chromatogram(fit)
 
 # percent signal of basecalls in sample
 plot_raw_sample(fit)
@@ -102,7 +102,7 @@ Or access a single fit model
 ```
 fit1 = fits[[1]] 
 print(fit1$sample_name)
-geom_chromatogram(fit1$sample_sanger,fit1$sample_locs[1], fit1$sample_locs[2])
+plot_sample_chromatogram(fit1)
 ```
 
 Or make a report containing results from all of the samples:
@@ -117,8 +117,6 @@ create_multiEditR_report(fits, params, "my_html_report.html")
 Known issues:
 
 - sometimes motifs get trimmed due to quality, resulting in chromatograms which seem shorter than expected
-
-- when the control sequence is revcom, printing the chromatogram might not be working correctly
 
 - sometimes the relative position of the edited bases are off by a fixed amount. I think this occurs when indels are removed but not accounted for. 
 

@@ -196,6 +196,7 @@ detect_edits = function(
 
       # Reverse complement motif if needed
       motif_orig = motif
+      wt_orig = wt
       if(motif_fwd){}else{
         motif = revcom(motif)
         wt = revcom(wt)
@@ -290,9 +291,9 @@ detect_edits = function(
 
       output_sample = output_sample_alt %>%
         mutate(target_base = if (motif_fwd){
-          index - sample_chromatogram_indices[1] + 1
+          which(str_split(motif_orig, "")[[1]] == wt_orig)
           }else{
-            nchar(motif_orig) - (index - sample_chromatogram_indices[1]) - 1
+            rev(which(str_split(motif_orig, "")[[1]] == wt_orig))
           }) %>%
         dplyr::select(target_base, `motif`, ctrl_max_base,max_base, A_perc:T_perc, A_sig:T_sig, 
                      A_pvalue:T_pvalue, index, ctrl_index, sample_file)

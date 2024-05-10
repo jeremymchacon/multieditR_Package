@@ -663,8 +663,8 @@ plot_chromatogram_at_motif = function(sanger, motif,
     motif_alignment = matchPattern(pattern = DNAString(motif), 
                                    subject = sanger_sequence, 
                                    max.mismatch = 4)
-    c("motif_start" = motif_alignment@ranges@start,
-      "motif_end" = motif_alignment@ranges@start + nchar(motif))
+    c("motif_start" = motif_alignment@ranges@start[1],
+      "motif_end" = motif_alignment@ranges@start[1] + nchar(motif))
     }
   
   if (!motif_fwd){

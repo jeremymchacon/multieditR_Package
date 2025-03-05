@@ -438,14 +438,16 @@ plot_trimmed_sample = function(fit){
 plot_editing_barplot = function(fit){
   editing_data = fit$intermediate_data$output_sample_alt
   editing_data %>%
-    ggplot(aes(x = sig, y = perc, color = sig)) +
+    ggplot(aes(x = sig, y = perc, color = sig, fill = sig)) +
     scale_y_continuous(limits = c(0,100), breaks = seq(0,100,10)) +
-    geom_bar(aes(fill = sig), stat = "summary", fun.y = "mean",
-             color = "black", alpha = 0.3, show.legend = F) +
-    geom_jitter(size = 2, alpha = 0.7) +
-    ylab("Percent height") +
+    geom_bar(data = . %>%
+               group_by(sig, base) %>%
+               summarize(mean_height = mean(perc)),
+             aes(y = mean_height),
+             stat = "identity",alpha = 0.6, color = "black") +
+    geom_point(size = 2, alpha = 1) +
+    ylab("Percent height of Sanger trace") +
     xlab("") +
-    labs(color = "Potential edit") +
     guides(fill = NULL) +
     theme_classic(base_size = 18) +
     theme(aspect.ratio = 4/1,

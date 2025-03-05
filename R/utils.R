@@ -337,55 +337,23 @@ revcom = function(x){as.character(reverseComplement(DNAString(x)))}
 # Plotting Functions
 ###
 plot_raw_sample = function(fit){
-  raw_sample_df = fit$intermediate_data$raw_sample_df
-  sample_alt = fit$intermediate_data$sample_alt
-  pre_cross_align_sample_df = fit$intermediate_data$pre_cross_align_sample_df
-  raw_sample_df %>%
-    ggplot(aes(x = index, y = 100*max_base_height / Tot.Area)) +
-    scale_y_continuous(limits = c(0,100), breaks = seq(0,100, 10), expand = c(0,0)) +
-    scale_x_continuous(limits = c(0, max(raw_sample_df$index)), expand = c(0,0)) +
-    geom_bar(data = sample_alt,
-             aes(x = index, y = 100), stat = "identity", fill = "#53BCC2", color = "#53BCC2") +
-    geom_rect(xmin = min(pre_cross_align_sample_df$index), ymin = 0,
-              xmax = max(pre_cross_align_sample_df$index), ymax = 100,
-              fill = "white", color = "black", alpha = 0)+
-    xlab("Position in sample file") +
-    ylab("Percent signal of basecall") +
-    geom_hline(yintercept = mean(pre_cross_align_sample_df$max_base_perc), color = "darkred", size = 1) +
-    geom_line() +
-    geom_rect(xmin = 0, ymin = 0, xmax = min(pre_cross_align_sample_df$index), ymax = 100,
-              fill = "grey", color = "black", alpha = 0.01) +
-    geom_rect(xmin = max(pre_cross_align_sample_df$index), ymin = 0,
-              xmax = max(raw_sample_df$index), ymax = 100,
-              fill = "grey", color = "black", alpha = 0.01) +
-    geom_rect(xmin = min(pre_cross_align_sample_df$index) +
-                (max(pre_cross_align_sample_df$index) - min(pre_cross_align_sample_df$index))*0.025 - 5,
-              ymin = 3,
-              xmax = min(pre_cross_align_sample_df$index) +
-                (max(pre_cross_align_sample_df$index) - min(pre_cross_align_sample_df$index))*0.025 + 215,
-              ymax = 20,
-              fill = "white", color = "black")+
-    annotate(geom = "text",
-             label = paste0("Average percent signal (", round(mean(pre_cross_align_sample_df$max_base_perc), 1),"%)") ,
-             color = "darkred",
-             x = min(pre_cross_align_sample_df$index) +
-               (max(pre_cross_align_sample_df$index) - min(pre_cross_align_sample_df$index))*0.025,
-             y = 17,
-             hjust = 0,
-             size = 6) +
-    annotate(geom = "text", label = "Low phred trimmed regions", color = "grey30",
-             x = min(pre_cross_align_sample_df$index) +
-               (max(pre_cross_align_sample_df$index) - min(pre_cross_align_sample_df$index))*0.025,
-             y = 12,
-             hjust = 0,
-             size = 6) +
-    annotate(geom = "text", label = "Motif of interest", color = "#53BCC2",
-             x = min(pre_cross_align_sample_df$index) +
-               (max(pre_cross_align_sample_df$index) - min(pre_cross_align_sample_df$index))*0.025,
-             y = 7,
-             hjust = 0,
-             size = 6) +
-    theme_classic(base_size = 18)
+  fit$intermediate_data$raw_sample_df  %>%
+    mutate(max_base_percent = max_base_height / Tot.Area) %>%
+    mutate(trimmed = ifelse(is_trimmed, 100, 0)) %>%
+    mutate(motif = ifelse(is_motif, 100, 0)) %>%
+    ggplot(aes(x = index, y= 100*max_base_percent))+
+    geom_bar(aes(y = trimmed), fill = "grey", stat = "identity")+
+    geom_bar(aes(y = motif),fill = "#53BCC2", stat = "identity")+
+    geom_line()+
+    xlab("Position in sample Sanger sequence") +
+    ylab("Percent signal of basecall")+
+    theme_classic(base_size = 18)+
+    annotate("rect", xmin =  max(tmp$index) *  0.05, xmax = max(tmp$index) *0.1,
+             ymin = 20, ymax = 30, fill = "grey")+
+    annotate("text", x = max(tmp$index) *0.12, y = 25, label = "low Phred trimmed bases", hjust = 0)+
+    annotate("rect", xmin =  max(tmp$index) *  0.05, xmax = max(tmp$index) *0.1,
+             ymin = 8, ymax = 18, fill = "#53BCC2")+
+    annotate("text", x = max(tmp$index) *0.12, y = 13, label = "motif bases", hjust = 0)
 }
 
 ### Plotting functions
@@ -393,46 +361,20 @@ plot_raw_sample = function(fit){
 
 # Function for plotting trimmed sample data
 plot_trimmed_sample = function(fit){
-  sample_df = fit$sample_data
-  pre_cross_align_sample_df = fit$intermediate_data$pre_cross_align_sample_df
-  output_sample_alt = fit$intermediate_data$output_sample_alt
-  raw_sample_df = fit$intermediate_data$raw_sample_df
-  sample_alt = fit$intermediate_data$sample_alt
-  motif_positions = fit$intermediate_data$motif_positions %>%
-    mutate(ctrl_index = ctrl_post_aligned_index)
-
-  sample_df$ctrl_max_base_perc = 100*sapply(1:nrow(sample_df), FUN = function(i){
-    unname(unlist(sample_df[i, paste0(sample_df$ctrl_max_base[i],"_perc")]))
-  })
-  raw_sample_df$ctrl_max_base_perc = 100*sapply(1:nrow(raw_sample_df), FUN = function(i){
-    unname(unlist(raw_sample_df[i, paste0(raw_sample_df$max_base[i],"_perc")]))
-  })
-  raw_sample_df %>%
-    mutate(perc = (100-ctrl_max_base_perc) %>% round(., 0)) %>%
-    ggplot(aes(x = index, y = perc)) +
-    geom_line() +
-    scale_y_continuous(limits = c(0,100), breaks = seq(0,100, 10), expand = c(0,0)) +
-    scale_x_continuous(limits = c(0, max(raw_sample_df$index)), expand = c(0,0)) +
-    # geom_bar(data = sample_alt, aes(x = index, y = 100), stat = "identity", fill = "#53BCC2", color = "#53BCC2", alpha = 0.1) +
-    # geom_bar(data = output_sample_alt, aes(x = index, y = 100), stat = "identity", fill = "lightblue", color = "lightblue") +
-    geom_rect(xmin = min(pre_cross_align_sample_df$index), ymin = 0,
-              xmax = max(pre_cross_align_sample_df$index), ymax = 100,
-              fill = "white", color = "black", alpha = 0) +
-    xlab("Position in sample file") +
-    ylab("Percent noise in WT basecall") +
-    geom_hline(yintercept = mean(pre_cross_align_sample_df$max_base_height), color = "darkred", size = 1) +
-    geom_line() +
-    geom_point(data = output_sample_alt %>%
-                 left_join(motif_positions),
-               aes( x = index, y = perc, alpha = sig), pch = 21, size = 2, color = "black") +
-    geom_rect(xmin = 0, ymin = 0, xmax = min(pre_cross_align_sample_df$index), ymax = 100,
-              fill = "grey", color = "black", alpha = 0.01) +
-    geom_rect(xmin = max(pre_cross_align_sample_df$index), ymin = 0,
-              xmax = max(raw_sample_df$index), ymax = 100,
-              fill = "grey", color = "black", alpha = 0.01) +
-    theme_classic(base_size = 18) +
-    scale_alpha_manual(values = c(0.3, 1)) +
-    theme(legend.position = "none")
+  fit$intermediate_data$raw_sample_df  %>%
+    mutate(max_base_percent = max_base_height / Tot.Area) %>%
+    filter(!is_trimmed) %>%
+    mutate(motif = ifelse(is_motif, 100, 0)) %>%
+    ggplot(aes(x = index, y= 100 - 100*max_base_percent))+
+    geom_bar(aes(y = motif),fill = "#53BCC2", stat = "identity")+
+    geom_line()+
+    ylim(0,100)+
+    xlab("Position in sample Sanger sequence") +
+    ylab("Percent noise in WT basecall")+
+    theme_classic(base_size = 18)+
+    annotate("rect", xmin =  max(tmp$index) *  0.05, xmax = max(tmp$index) *0.1,
+             ymin = 8, ymax = 18, fill = "#53BCC2")+
+    annotate("text", x = max(tmp$index) *0.12, y = 13, label = "motif bases", hjust = 0)
 }
 
 plot_editing_barplot = function(fit){

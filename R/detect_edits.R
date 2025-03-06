@@ -74,7 +74,7 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
   
   
   # apply the control sequence to the sample sequence. 
-  control_alignment = pairwiseAlignment(pattern = DNAString(ctrl_seq), 
+  control_alignment = pwalign::pairwiseAlignment(pattern = DNAString(ctrl_seq), 
                                         subject = DNAString(sample_seq))
   
   aligned_sample = as.character(alignedSubject(control_alignment))

@@ -47,7 +47,6 @@ checkIUPAC = function(x){all(strsplit(x, "")[[1]] %in% c("A", "C", "G", "T", "U"
 # convert nucleotide to a factor
 nucleotide_factor = function(x){factor(x, levels = c("A", "C", "G", "T"))}
 
-## These were taken from the batch mode utils file, not from multiEditR, which is a bit different
 make_ctrl_sanger_df = function(sanger_file){
   base_calls = makeBaseCalls(sanger_file)
   sanger_df = base_calls %>% peakAmpMatrix %>% data.frame()
@@ -242,13 +241,13 @@ align_and_trim = function(pattern_seq, subject_seq, min_continuity = 15){
   input_pattern = pattern_seq
   input_subject = subject_seq
 
-  alignment = pairwiseAlignment(pattern = pattern_seq, subject = subject_seq)
+  alignment = pwalign::pairwiseAlignment(pattern = pattern_seq, subject = subject_seq)
 
   output_pattern = alignment@pattern %>% as.character() %>% gsub(gsub_pattern, "", ., perl = T) %>% gsub("-", "", ., perl = T)
   output_subject = alignment@subject %>% as.character() %>% gsub(gsub_pattern, "", ., perl = T) %>% gsub("-", "", ., perl = T)
 
   while(input_pattern != output_pattern | input_subject != output_subject){
-    alignment = pairwiseAlignment(pattern = output_pattern, subject = output_subject)
+    alignment = pwalign::pairwiseAlignment(pattern = output_pattern, subject = output_subject)
 
     old_output_pattern = output_pattern
     old_output_subject = output_subject
@@ -613,102 +612,25 @@ geom_chromatogram = function(sanger, start_index, end_index){
   return(chromatogram)
 }
 
-plot_chromatogram_at_motif = function(sanger, motif, 
+
+plot_chromatogram_at_motif = function(sanger, raw_sample_df, motif, 
                                       sanger_fwd = TRUE,
                                       motif_fwd = TRUE){
-  library(sangerseqR)
-  library(stringr)
-  sanger_to_df = function(sanger){
-    # Takes a sanger object and turns it into a wide-format dataframe
-    # that has the peak values for each called base / position
-    sanger %>%
-      makeBaseCalls() %>%
-      peakAmpMatrix() %>%
-      as.data.frame() %>%
-      rename(A = V1,C = V2, G = V3,`T` = V4) %>%
-      tibble::rowid_to_column() %>%
-      left_join(x = ., y = (
-        pivot_longer(., -rowid, names_to = "base", values_to = "peak") %>%
-          group_by(rowid) %>%
-          filter(peak == max(peak)[1]) %>%
-          mutate(base_called = base) %>%
-          select(rowid, base_called, peak)
-      )
-      )
-  }
+  motif_positions = c(motif_start = min(raw_sample_df$raw_sample_position[raw_sample_df$motif == 1]),
+                      motif_end = max(raw_sample_df$raw_sample_position[raw_sample_df$motif == 1])+1)
   
-  get_motif_locs = function(sanger, motif, sanger_fwd = TRUE){
-    sanger_sequence = sanger_to_df(sanger) %>%
-      pull(base_called) %>%
-      paste(., collapse = "") %>%
-      DNAString()
-    
-    if (!sanger_fwd){
-      sanger_sequence = reverseComplement(sanger_sequence)
-    }
-    
-    motif_alignment = matchPattern(pattern = DNAString(motif), 
-                                   subject = sanger_sequence, 
-                                   max.mismatch = 4)
-    c("motif_start" = motif_alignment@ranges@start[1],
-      "motif_end" = motif_alignment@ranges@start[1] + nchar(motif))
-    }
+  sanger_peaks = raw_sample_df %>%
+    rename(A = A_area) %>%
+    rename(C = C_area) %>%
+    rename(G = G_area) %>%
+    rename(T = T_area) %>%
+    rename(base_called = sample_primary_call) %>%
+    rename(peak = max_base_height) %>%
+    rename(rowid = raw_sample_position) %>%
+    select(rowid, A, C, G, T, base_called, peak) %>%
+    filter(base_called %in% c("A","C","G","T")) %>%
+    distinct()
   
-  if (!motif_fwd){
-    motif = as.character(reverseComplement(DNAString(motif)))
-  }
-  
-  motif_positions = get_motif_locs(sanger, motif, sanger_fwd = sanger_fwd)
-  
-  sanger_peaks = sanger_to_df(sanger)
-  
-  if (!sanger_fwd){
-    sanger_peaks$orig_rowid = sanger_peaks$rowid
-    sanger_peaks$rowid = 2 +  max(sanger_peaks$orig_rowid) - sanger_peaks$orig_rowid
-    sanger_peaks$orig_base = sanger_peaks$base_called
-    sanger_peaks$base_called = case_when(
-      sanger_peaks$orig_base == "A" ~ "T",
-      sanger_peaks$orig_base == "T" ~ "A",
-      sanger_peaks$orig_base == "C" ~ "G",
-      sanger_peaks$orig_base == "G" ~ "C"
-    )
-    sanger_peaks = sanger_peaks %>%
-      rename(orig_A = A,
-             orig_C = C,
-             orig_T = `T`,
-             orig_G = G) %>%
-      mutate(A = orig_T,
-             C = orig_G,
-             `T` = orig_A,
-             G = orig_C)
-  }
-
-  
-  # check for motif offset -- for some reason SOMETIMES we're offset by one
-  sanger_locs = sanger_peaks %>%
-    filter(rowid >= motif_positions[["motif_start"]],
-           rowid < motif_positions[["motif_end"]]) %>%
-    arrange(rowid)
-  hits_center = 0
-  hits_back = 0
-  hits_fwd = 0
-  motif_chars = str_split(motif, "")[[1]]
-  for (i in 2:(nrow(sanger_locs)-1)){
-    if (sanger_locs$base_called[i] == motif_chars[i]){
-      hits_center = hits_center + 1
-    }
-    if (sanger_locs$base_called[i+1] == motif_chars[i]){
-      hits_back = hits_back + 1
-    }
-    if (sanger_locs$base_called[i-1] == motif_chars[i]){
-      hits_fwd = hits_fwd + 1
-    }
-  }
-  if (hits_fwd == max(c(hits_back, hits_center, hits_fwd))){
-    motif_positions = motif_positions - 1
-  }else if(hits_back == max(c(hits_back, hits_center, hits_fwd))){
-    motif_positions = motif_positions + 1
-  }
   
   # we use those locations to rearrange peak_mat
   sanger_peaks_at_motif = sanger_peaks %>%
@@ -802,22 +724,27 @@ plot_chromatogram_at_motif = function(sanger, motif,
           aspect.ratio = 1/1.5)+
     annotate("text", x = -0.5, y = -c(1:4)/8, label = c("A","C","G","T"))+
     annotate("text", x = 1:nchar(motif)-0.5, y = -0, 
-             label = str_split(motif, "")[[1]])+
+             label = if(motif_fwd){
+               str_split(motif, "")[[1]]
+               }else{
+                 str_split(revcom(motif), "")[[1]]
+               })+
     annotate("text", x = 1:nchar(motif)-0.5, y = -5/8, 
-             label = if (motif_fwd){
+             label = if(motif_fwd){
                as.character(1:nchar(motif))
              }else{
                as.character(rev(1:nchar(motif)))
              }
-    )
+    )+
+    annotate("text", x = 1, y = 1, label = paste0("motif given: ",motif, "\nmotif revcom below?  ", !motif_fwd), 
+             hjust = 0, vjust = 0, size = 2)
 }
-
-
 
 plot_sample_chromatogram = function(fit){
   motif = fit$motif
   motif_fwd = fit$motif_fwd
-  plot_chromatogram_at_motif(fit$sample_sanger, motif, motif_fwd = motif_fwd)
+  plot_chromatogram_at_motif(fit$sample_sanger, raw_sample_df = fit$intermediate_data$raw_sample_df, 
+                             motif = motif, motif_fwd = motif_fwd)
 }
 plot_control_chromatogram = function(fit){
   if (str_detect(fit$intermediate_data$sample_alt$ctrl_file[1], "\\.fa")){
@@ -830,11 +757,30 @@ plot_control_chromatogram = function(fit){
   motif = fit$motif
   motif_fwd = fit$motif_fwd
   control_fwd = !fit$ctrl_is_revcom
-  plot_chromatogram_at_motif(fit$ctrl_sanger, motif,
+  sanger = fit$ctrl_sanger
+  ctrl_df = suppressWarnings(
+    make_sample_df(sanger)%>% 
+    rename(raw_control_position = position) %>%
+    mutate(Tot.Area = A_area+ C_area+G_area+ T_area) %>%
+    group_by(raw_control_position) %>%
+    mutate(max_base_height = max(A_area, C_area, G_area, T_area)) %>%
+    ungroup() %>%
+    select(c(raw_control_position, max_base, A_area, C_area, G_area, T_area, 
+             Tot.Area, max_base_height,
+             A_perc, C_perc,G_perc,T_perc)) %>%
+    left_join(fit$intermediate_data$raw_sample_df %>%
+                select(-c(A_area, C_area, G_area, T_area, Tot.Area,
+                          A_perc, C_perc, G_perc, T_perc, max_base, max_base_height))) %>%
+    mutate(index = raw_control_position) %>%
+    mutate(raw_sample_position = raw_control_position)
+  )
+  
+  
+  plot_chromatogram_at_motif(fit$ctrl_sanger, raw_sample_df = ctrl_df,
+                             motif = motif,
                              sanger_fwd = control_fwd,
                              motif_fwd = motif_fwd)
 }
-
 
 
 load_ctrl_seq = function(ctrl_file,
@@ -939,8 +885,8 @@ is_revcom_ctrl_better = function(init_sample_seq,
                                  init_ctrl_seq){
   init_sample_seq = as.character(init_sample_seq)
   init_ctrl_seq = as.character(init_ctrl_seq)
-  fwd_score = score(pairwiseAlignment(init_sample_seq, init_ctrl_seq))
-  rev_score = score(pairwiseAlignment(init_sample_seq, 
+  fwd_score = score(pwalign::pairwiseAlignment(init_sample_seq, init_ctrl_seq))
+  rev_score = score(pwalign::pairwiseAlignment(init_sample_seq, 
                                       revcom(init_ctrl_seq)))
   return(rev_score > fwd_score)
 }

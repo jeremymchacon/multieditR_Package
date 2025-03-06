@@ -69,6 +69,47 @@ make_ctrl_sanger_df = function(sanger_file){
 }
 
 
+# get_trim_points returns a vector of length 2, the first point
+# being the first position to be included, and the second being the second 
+# position to be included. It is modified from abif_to_fastq.
+# If the trimming would leave less than min_seq_len, it returns -1
+# similarly, if the sequence is already shorter than min_seq_len, it returns -1
+get_trim_points = function (path, cutoff = 0.001,
+                            min_seq_len = 20, offset = 33)
+{
+  abif <- sangerseqR::read.abif(path)
+  if (is.null(abif@data$PCON.2)) {
+    message(sprintf("failed on %s", path))
+    return()
+  }
+  nucseq <- substring(abif@data$PBAS.2, 1, length(abif@data$PLOC.2))
+  if (!typeof(abif@data$PCON.2) == "integer") {
+    num_quals <- utf8ToInt(abif@data$PCON.2)[1:length(abif@data$PLOC.2)]
+  }else {
+    num_quals <- abif@data$PCON.2[1:length(abif@data$PLOC.2)]
+  }
+
+  trim_msg <- "Sequence %s can not be trimmed because it is shorter than the trim\n               segment size"
+  if (nchar(nucseq) <= min_seq_len) {
+    warning(sprintf(trim_msg, path))
+    return(-1)
+  }
+  scores = cutoff - 10^(num_quals/-10)
+  running_sum <- rep(0, length(scores) + 1)
+  for (i in 1:length(scores)) {
+    num <- scores[i] + running_sum[i]
+    running_sum[i + 1] <- ifelse(num < 0, 0, num)
+  }
+  trim_start <- min(which(running_sum > 0)) - 1
+  trim_finish <- which.max(running_sum) - 2
+  if (trim_finish - trim_start < min_seq_len - 1) {
+    warning(sprintf(trim_msg, path))
+    return(-1)
+  }
+  return(c(trim_start, trim_finish))
+}
+
+
 abif_to_fastq = function (seqname = "sample", path, trim = TRUE, cutoff = 1,
                           min_seq_len = 20, offset = 33, recall = FALSE)
 {
@@ -82,8 +123,7 @@ abif_to_fastq = function (seqname = "sample", path, trim = TRUE, cutoff = 1,
   nucseq <- substring(abif@data$PBAS.2, 1, length(abif@data$PLOC.2))
   if (!typeof(abif@data$PCON.2) == "integer") {
     num_quals <- utf8ToInt(abif@data$PCON.2)[1:length(abif@data$PLOC.2)]
-  }
-  else {
+  }else {
     num_quals <- abif@data$PCON.2[1:length(abif@data$PLOC.2)]
   }
   if (isTRUE(recall)) {
@@ -337,6 +377,7 @@ revcom = function(x){as.character(reverseComplement(DNAString(x)))}
 # Plotting Functions
 ###
 plot_raw_sample = function(fit){
+  tmp = fit$intermediate_data$raw_sample_df 
   fit$intermediate_data$raw_sample_df  %>%
     mutate(max_base_percent = max_base_height / Tot.Area) %>%
     mutate(trimmed = ifelse(is_trimmed, 100, 0)) %>%
@@ -361,6 +402,7 @@ plot_raw_sample = function(fit){
 
 # Function for plotting trimmed sample data
 plot_trimmed_sample = function(fit){
+  tmp = fit$intermediate_data$raw_sample_df 
   fit$intermediate_data$raw_sample_df  %>%
     mutate(max_base_percent = max_base_height / Tot.Area) %>%
     filter(!is_trimmed) %>%
@@ -790,4 +832,128 @@ plot_control_chromatogram = function(fit){
   plot_chromatogram_at_motif(fit$ctrl_sanger, motif,
                              sanger_fwd = control_fwd,
                              motif_fwd = motif_fwd)
+}
+
+
+
+load_ctrl_seq = function(ctrl_file,
+                         ctrl_is_fasta,
+                         phred_cutoff){
+  # Make sangerseq objects
+  # Need to flesh out the TRUE statement branch
+  if(ctrl_is_fasta){ 
+    fasta_lines = read_lines(ctrl_file)
+    input_seq = paste0(fasta_lines[2:length(fasta_lines)], collapse = "")
+    init_ctrl_seq = input_seq
+    ctrl_fastq = list()
+    ctrl_fastq$seq = input_seq
+    ctrl_df = data.frame(max_base = init_ctrl_seq %>% base::strsplit(., split = "") %>% unlist(),
+                         base_call = init_ctrl_seq %>% base::strsplit(., split = "") %>% unlist()) %>%
+      mutate(index = 1:NROW(max_base))
+    ctrl_sanger = NULL
+  } else{
+    ctrl_sanger = readsangerseq(ctrl_file)
+    ctrl_df = make_ctrl_sanger_df(ctrl_sanger)
+    init_ctrl_seq = ctrl_df$base_call %>% paste0(., collapse = "")
+    ctrl_fastq = abif_to_fastq(path = ctrl_file, cutoff = phred_cutoff)
+  }
+  return(list(
+    "init_ctrl_seq" = init_ctrl_seq,
+    "ctrl_fastq" = ctrl_fastq,
+    "ctrl_df" = ctrl_df,
+    "ctrl_sanger" = ctrl_sanger
+  ))
+}
+
+
+calculate_edit_pvalue = function(motif_part_of_sample, zaga_parameters, wt, edit, p_value){
+  # this reproduces the functionality of "pvalue_adjust" from Mitch's code
+  zaga_params_edit_base_only = zaga_parameters %>%
+    filter(base == edit)
+  
+  # get the potential edited rows
+  potential_edits = motif_part_of_sample %>%
+    filter(expected_motif == wt)
+  
+  motif_part_of_sample %>%
+    left_join(
+      potential_edits %>%
+        mutate(edit_pvalue = mapply(FUN = gamlss.dist::dZAGA, x = .[[paste0(edit, "_area")]],
+                                    mu = zaga_params_edit_base_only[1, "mu"],
+                                    sigma = zaga_params_edit_base_only[1, "sigma"],
+                                    nu = zaga_params_edit_base_only[1, "nu"])) %>% 
+        mutate(edit_padjust = p.adjust(edit_pvalue, "BH")) %>% 
+        mutate(edit_sig = edit_padjust < p_value)
+    )
+}
+
+
+make_sample_df = function(sample_sanger){
+  # this creates the basic dataframe we use; it contains the peaks per base
+  # for all positions in the sanger--we add trimming information later
+  # the gist of getting peak data is as follows:
+  # for each position, find the trace location where the peak is.
+  # if a base did not have a peak, then figure out which base had the highest peak
+  # and where. grab the value from that trace location for the NA bases. 
+  # peakPosMatrix tells us where peaks were, if there was one. 
+  
+  peak_locs = sangerseqR::makeBaseCalls(sample_sanger)@peakPosMatrix %>% 
+    as_tibble()
+  names(peak_locs) = bases
+  peak_locs$max_base = sangerseqR::makeBaseCalls(sample_sanger)@primarySeq %>%
+    as.character() %>% strsplit("") %>% {.[[1]]}
+  
+  ### Once this runs, it's the same as samp_peakAmpDF from before
+  for (i in 1:nrow(peak_locs)){
+    row = unlist(peak_locs[i,1:4])
+    peak_vals = sapply(1:4, FUN = function(x){
+      if (is.na(row[x])){return(NA)}
+      else{
+        return(sample_sanger@traceMatrix[row[x], x])
+      }})
+    peak_locs$A[i] = ifelse(is.na(peak_locs$A[i]), row[peak_locs$max_base[i]], peak_locs$A[i])
+    peak_locs$C[i] = ifelse(is.na(peak_locs$C[i]), row[peak_locs$max_base[i]], peak_locs$C[i])
+    peak_locs$G[i] = ifelse(is.na(peak_locs$G[i]), row[peak_locs$max_base[i]], peak_locs$G[i])
+    peak_locs$T[i] = ifelse(is.na(peak_locs$T[i]), row[peak_locs$max_base[i]], peak_locs$T[i])
+    
+  }
+  
+  peak_locs$A_area = sample_sanger@traceMatrix[peak_locs$A, 1]
+  peak_locs$C_area = sample_sanger@traceMatrix[peak_locs$C, 2]
+  peak_locs$G_area = sample_sanger@traceMatrix[peak_locs$G, 3]
+  peak_locs$T_area = sample_sanger@traceMatrix[peak_locs$T, 4]
+  peak_locs$A_perc = peak_locs$A_area/ rowSums(peak_locs[c("A_area","C_area","G_area","T_area")])
+  peak_locs$C_perc = peak_locs$C_area/ rowSums(peak_locs[c("A_area","C_area","G_area","T_area")])
+  peak_locs$G_perc = peak_locs$G_area/ rowSums(peak_locs[c("A_area","C_area","G_area","T_area")])
+  peak_locs$T_perc = peak_locs$T_area/ rowSums(peak_locs[c("A_area","C_area","G_area","T_area")])
+  
+  peak_locs$position = 1:nrow(peak_locs)
+  peak_locs
+}
+
+revcom = function(x){as.character(Biostrings::reverseComplement(Biostrings::DNAString(x)))}
+
+is_revcom_ctrl_better = function(init_sample_seq,
+                                 init_ctrl_seq){
+  init_sample_seq = as.character(init_sample_seq)
+  init_ctrl_seq = as.character(init_ctrl_seq)
+  fwd_score = score(pairwiseAlignment(init_sample_seq, init_ctrl_seq))
+  rev_score = score(pairwiseAlignment(init_sample_seq, 
+                                      revcom(init_ctrl_seq)))
+  return(rev_score > fwd_score)
+}
+
+is_file_ab1 = function(filepath){
+  # checks if the file is .ab1, looks like a fasta, or neither
+  if (!file.exists(filepath)){
+    return(FALSE)
+  }
+  result = tryCatch({
+    sangerseqR::readsangerseq(filepath)
+    return(TRUE)
+  },error =
+    function(e){
+      FALSE
+    })
+  return(result)
 }

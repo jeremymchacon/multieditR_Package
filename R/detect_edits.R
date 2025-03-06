@@ -181,7 +181,8 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
     mutate(sample_file = sample_file) %>%
     mutate(expected_base = expected_motif) %>%
     mutate(sample_file = sample_file) %>%
-    select(target_base, motif, ctrl_max_base, expected_base, max_base, sample_secondary_call,
+    mutate(passed_trimming = !trimmed) %>%
+    select(passed_trimming, target_base, motif, ctrl_max_base, expected_base, max_base, sample_secondary_call,
            A_perc, C_perc, G_perc, T_perc, 
            edit_pvalue, edit_padjust, edit_sig, index, sample_file)
   )

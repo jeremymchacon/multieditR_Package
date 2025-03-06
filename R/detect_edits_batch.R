@@ -101,7 +101,7 @@ get_batch_results_table = function(fits){
     dplyr::mutate(position_in_sample_trace = index) %>%
     dplyr::mutate(sample_max_base = max_base) %>%
     dplyr::mutate(sample_secondary_base = sample_secondary_call) %>%
-    dplyr::select(sample_name, target_position_in_motif, motif, 
+    dplyr::select(sample_name, passed_trimming, target_position_in_motif, motif, 
                   expected_base, ctrl_max_base, sample_max_base, sample_secondary_base,
                   edit_sig, edit_pvalue, edit_padjust, A_perc, C_perc, G_perc, T_perc, sample_file)
 }

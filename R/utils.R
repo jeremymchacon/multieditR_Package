@@ -378,16 +378,17 @@ revcom = function(x){as.character(reverseComplement(DNAString(x)))}
 ###
 plot_raw_sample = function(fit){
   tmp = fit$intermediate_data$raw_sample_df 
-  fit$intermediate_data$raw_sample_df  %>%
+  tmp %>%
     mutate(max_base_percent = max_base_height / Tot.Area) %>%
     mutate(trimmed = ifelse(is_trimmed, 100, 0)) %>%
-    mutate(motif = ifelse(is_motif, 100, 0)) %>%
+    mutate(motif = ifelse(motif > -1, 100, 0)) %>%
     ggplot(aes(x = index, y= 100*max_base_percent))+
-    geom_bar(aes(y = trimmed), fill = "grey", stat = "identity")+
-    geom_bar(aes(y = motif),fill = "#53BCC2", stat = "identity")+
+    geom_bar(aes(y = trimmed), fill = "grey", stat = "identity", width = 2)+
+    geom_bar(aes(y = motif),fill = "#53BCC2", stat = "identity", width = 2)+
     geom_line()+
     xlab("Position in sample Sanger sequence") +
     ylab("Percent signal of basecall")+
+    ylim(0,100)+
     theme_classic(base_size = 18)+
     annotate("rect", xmin =  max(tmp$index) *  0.05, xmax = max(tmp$index) *0.1,
              ymin = 20, ymax = 30, fill = "grey")+
@@ -403,12 +404,12 @@ plot_raw_sample = function(fit){
 # Function for plotting trimmed sample data
 plot_trimmed_sample = function(fit){
   tmp = fit$intermediate_data$raw_sample_df 
-  fit$intermediate_data$raw_sample_df  %>%
+  tmp  %>%
     mutate(max_base_percent = max_base_height / Tot.Area) %>%
     filter(!is_trimmed) %>%
-    mutate(motif = ifelse(is_motif, 100, 0)) %>%
+    mutate(motif = ifelse(motif > -1, 100, 0)) %>%
     ggplot(aes(x = index, y= 100 - 100*max_base_percent))+
-    geom_bar(aes(y = motif),fill = "#53BCC2", stat = "identity")+
+    geom_bar(aes(y = motif),fill = "#53BCC2", stat = "identity", width = 2)+
     geom_line()+
     ylim(0,100)+
     xlab("Position in sample Sanger sequence") +
@@ -874,17 +875,18 @@ calculate_edit_pvalue = function(motif_part_of_sample, zaga_parameters, wt, edit
   # get the potential edited rows
   potential_edits = motif_part_of_sample %>%
     filter(expected_motif == wt)
-  
-  motif_part_of_sample %>%
-    left_join(
-      potential_edits %>%
-        mutate(edit_pvalue = mapply(FUN = gamlss.dist::dZAGA, x = .[[paste0(edit, "_area")]],
-                                    mu = zaga_params_edit_base_only[1, "mu"],
-                                    sigma = zaga_params_edit_base_only[1, "sigma"],
-                                    nu = zaga_params_edit_base_only[1, "nu"])) %>% 
-        mutate(edit_padjust = p.adjust(edit_pvalue, "BH")) %>% 
-        mutate(edit_sig = edit_padjust < p_value)
-    )
+  suppressMessages(
+    motif_part_of_sample %>%
+      left_join(
+        potential_edits %>%
+          mutate(edit_pvalue = mapply(FUN = gamlss.dist::dZAGA, x = .[[paste0(edit, "_area")]],
+                                      mu = zaga_params_edit_base_only[1, "mu"],
+                                      sigma = zaga_params_edit_base_only[1, "sigma"],
+                                      nu = zaga_params_edit_base_only[1, "nu"])) %>% 
+          mutate(edit_padjust = p.adjust(edit_pvalue, "BH")) %>% 
+          mutate(edit_sig = edit_padjust < p_value)
+      )
+  )
 }
 
 

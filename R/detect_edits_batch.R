@@ -97,9 +97,13 @@ get_batch_results_table = function(fits){
   fits = fits[sapply(fits, FUN = function(x){x$completed})]
   fits %>% lapply(., "[[", 1) %>%
     plyr::ldply(., "tibble") %>%
-    dplyr::select(sample_name, target_base, motif, ctrl_max_base, A_perc, C_perc, G_perc, T_perc,
-           A_sig, C_sig, G_sig, T_sig, edit_pvalue, edit_padjust, edit_sig, index, 
-           sample_file)
+    dplyr::mutate(target_position_in_motif = target_base) %>%
+    dplyr::mutate(position_in_sample_trace = index) %>%
+    dplyr::mutate(sample_max_base = max_base) %>%
+    dplyr::mutate(sample_secondary_base = sample_secondary_call) %>%
+    dplyr::select(sample_name, target_position_in_motif, motif, 
+                  expected_base, ctrl_max_base, sample_max_base, sample_secondary_base,
+                  edit_sig, edit_pvalue, edit_padjust, A_perc, C_perc, G_perc, T_perc, sample_file)
 }
 
 get_batch_stats_table = function(fits){

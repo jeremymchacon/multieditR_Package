@@ -10,8 +10,23 @@
 ###########################################################################################
 
 
+# edits for this version:
+# 1. put control sequence positions into sample
+# 2. find the motif in the control and propagate positions to sample
+# 3. allow there to be multiple motif positions
+
+
+## Algorithm in brief:
+# 1. load sequences, rev-com control and motif if necessary
+# 2. pairwise align sample and control to determine relative positions
+# 3. use Mott's algorithm to determine what should be trimmed in sample and flag
+# 4. Find all instances of motif in control sequence, allowing zero mismatches (because otherwise small motifs would have too many false positives)
+# 5. extract the trimmed, non-motif parts of the sample and use it to build the null distribution with ZAGA
+# 6. calculate the p-value for all wt -> edit transitions using the ZAGA statistics and BH adjustments
 detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
                             phred_cutoff = 0.00001, p_value = 0.01){
+  
+  # get the sequences
   sample_sanger = sangerseqR::readsangerseq(sample_file)
   sample_seq = makeBaseCalls(sample_sanger) %>% 
     {.@primarySeq} %>%
@@ -29,6 +44,8 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
     fasta_lines = read_lines(ctrl_file)
     ctrl_seq = paste0(fasta_lines[2:length(fasta_lines)], collapse = "")
   }
+  
+  # figure out if the control should be rev-com
   ctrl_is_revcom = FALSE
   if (is_revcom_ctrl_better(sample_seq, ctrl_seq)){
     message("control sequence aligns better to sample sequence when rev-com. Applying revcom to control sequence.")
@@ -36,45 +53,56 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
     ctrl_is_revcom = TRUE
   }
   
-  # by now, the sample and control should be in the same order. 
+  # revcom motif if necessary
   motif_orig = motif
   if (!motif_fwd){
     motif = revcom(motif)
   }
   
-  # lets find the motif in both of them; first check.
+  # make sure at least one motif is findable in the control
   n_motif_alignments_to_ctrl = countPattern(pattern = Biostrings::DNAString(motif), 
                                             subject =Biostrings::DNAString(ctrl_seq),
                                             max.mismatch = 1)
-  n_motif_alignments_sample = countPattern(Biostrings::DNAString(motif), 
-                                           Biostrings::DNAString(sample_seq), 
-                                           max.mismatch = 4)
   if (n_motif_alignments_to_ctrl == 0){
-    stop("motif not found in control sequence. are you sure you have motif_fwd correct?")
-  }
-  if (n_motif_alignments_sample == 0){
-    stop("motif not found in sample sequence with up to 4 allowed mismatches. Are you sure you have motif_fwd correct?")
+    stop("motif not found in control sequence while allowing 1 mismatch. are you sure you have motif_fwd correct?")
   }
   
-  
-  # lets align by grabbing just the motif section
-  # motif_alignment_to_ctrl = matchPattern(pattern = DNAString(motif), 
-  #                                        subject = DNAString(ctrl_seq),
-  #                                        max.mismatch = 1)
-  motif_alignment_to_sample = matchPattern(pattern = DNAString(motif), 
-                                           subject = DNAString(sample_seq), 
-                                           max.mismatch = 4)
   
   #### this will hold our main sequence table
-  sample_df = make_sample_df(sample_sanger)
+  sample_df = make_sample_df(sample_sanger) %>%
+    rename(raw_sample_position = position)
   
-  ### lets add in where the motif is
-  sample_df$motif = case_when(sample_df$position < motif_alignment_to_sample@ranges@start ~ FALSE,
-                              sample_df$position >= motif_alignment_to_sample@ranges@start +
-                                motif_alignment_to_sample@ranges@width ~ FALSE,
-                              .default = TRUE)
-  ## and the secondary call
-  sample_df$secondary_base_call = strsplit(secondary_seq, "")[[1]]
+  
+  # apply the control sequence to the sample sequence. 
+  control_alignment = pairwiseAlignment(pattern = DNAString(ctrl_seq), 
+                                        subject = DNAString(sample_seq))
+  
+  aligned_sample = as.character(alignedSubject(control_alignment))
+  aligned_sample = strsplit(aligned_sample, "")[[1]]
+  aligned_control = as.character(alignedPattern(control_alignment))
+  aligned_control = strsplit(aligned_control, "")[[1]]
+  
+  # figure out the raw sample position
+  raw_sample_position = cumsum(aligned_sample != "-")
+  raw_control_position = cumsum(aligned_control != "-")
+  
+  # Create a dataframe with the alignment and relative positions
+  alignment_df = data.frame(raw_sample_position,
+                            sample_primary_call = aligned_sample, 
+                            raw_control_position,
+                            control_primary_call = aligned_control, 
+                            stringsAsFactors = FALSE)
+  
+  # bind the sample_df, which holds quality scores and percentages
+  alignment_df = suppressMessages(
+    left_join(alignment_df, sample_df)
+  )
+  # also bind the secondary call in the sample
+  secondary_call = data.frame(sample_secondary_call = strsplit(secondary_seq, "")[[1]],
+                              raw_sample_position = 1:nchar(secondary_seq))
+  alignment_df = suppressMessages(
+    left_join(alignment_df, secondary_call)
+  )
   
   
   # find out what should be trimmed using Mott's algo, which Mitch implemented
@@ -88,14 +116,32 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
     start_pos = trim_points[1]
     end_pos = trim_points[2]    
   }
-
-  sample_df$trimmed = case_when(sample_df$position < start_pos ~ TRUE,
-                                sample_df$position >= end_pos ~ TRUE,
-                                .default = FALSE)
+  
+  alignment_df$trimmed = case_when(alignment_df$raw_sample_position < start_pos ~ TRUE,
+                                   alignment_df$raw_sample_position >= end_pos ~ TRUE,
+                                   .default = FALSE)
+  
+  # find all alignments of the motif to the control sequence, now we allow zero
+  # mismatches because if the motif is tiny, we don't want clutter
+  
+  motif_alignments_to_ctrl = matchPattern(pattern = DNAString(motif), 
+                                          subject = DNAString(ctrl_seq), 
+                                          max.mismatch = 0)
+  motif_alignments = motif_alignments_to_ctrl@ranges %>% as.data.frame()
+  message(paste0(nrow(motif_alignments), " alignments of motif to control sequence found."))
+  
+  # add in the motif positions. -1 for non-motif, otherwise counting from 1 up for each detection
+  alignment_df$motif_found = -1
+  for (i in 1:nrow(motif_alignments)){
+    start = motif_alignments[i, "start"]
+    end = motif_alignments[i, "end"]
+    alignment_df$motif[alignment_df$raw_control_position %in% seq(from = start, to = end, by = 1)] = i
+  }  
   
   
-  motif_part_of_sample = sample_df %>%
-    filter(motif)
+  
+  motif_part_of_sample = alignment_df %>%
+    filter(motif != -1)
   
   ## lets check if any of the motif is being suggested for trimming, and warn if so
   if (any(motif_part_of_sample$trimmed)){
@@ -103,13 +149,14 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
             It is not being trimmed during edit detection, but this may affect results")
   }
   
-  motif_part_of_sample$expected_motif = strsplit(motif, "")[[1]]
-  motif_part_of_sample$ctrl_max_base = motif_part_of_sample$expected_motif
-  motif_part_of_sample$index = motif_part_of_sample$position
-  motif_part_of_sample$ctrl_index = motif_part_of_sample$position
+  # this is all just renames to be compatible with make_ZAGA_df
+  motif_part_of_sample$expected_motif = motif_part_of_sample$control_primary_call 
+  motif_part_of_sample$ctrl_max_base = motif_part_of_sample$expected_motif 
+  motif_part_of_sample$index = motif_part_of_sample$raw_sample_position
+  motif_part_of_sample$ctrl_index = motif_part_of_sample$raw_control_position
   # this should be used for generating the NULL; only keep the trimmed part
-  nonmotif_part_of_sample = sample_df %>%
-    filter(!motif) %>%
+  nonmotif_part_of_sample = alignment_df %>%
+    filter(motif == -1) %>%
     filter(!trimmed)
   
   
@@ -122,8 +169,9 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
                                        zaga_parameters, wt, edit, p_value)
   
   # rearrange results to match previous version
-  sample_data = output_stats %>%
-    left_join(sample_df %>% 
+  sample_data = suppressMessages(
+    output_stats %>%
+    left_join(alignment_df %>% 
                 select(-motif))  %>%
     select(-motif) %>%
     mutate(motif = motif) %>%
@@ -133,34 +181,38 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
     mutate(sample_file = sample_file) %>%
     mutate(expected_base = expected_motif) %>%
     mutate(sample_file = sample_file) %>%
-    select(target_base, motif, ctrl_max_base, expected_base, max_base, 
+    select(target_base, motif, ctrl_max_base, expected_base, max_base, sample_secondary_call,
            A_perc, C_perc, G_perc, T_perc, 
            edit_pvalue, edit_padjust, edit_sig, index, sample_file)
+  )
   
-  raw_sample_df = sample_df %>%
+  raw_sample_df = alignment_df %>%
     mutate(Tot.Area = A_area + C_area + G_area + T_area) %>%
-    mutate(primary_base_call = max_base) %>%
-    group_by(position) %>%
+    group_by(raw_sample_position) %>%
     mutate(max_base_height = max(A_area, C_area, G_area, T_area)) %>% 
-    mutate(index = position) %>%
-    mutate(is_motif = motif) %>%
+    mutate(index = raw_sample_position) %>%
     mutate(is_trimmed = trimmed) %>%
     ungroup() %>%
-    select(A_area, C_area, G_area, T_area, primary_base_call, secondary_base_call,
-           max_base, Tot.Area, A_perc, C_perc, G_perc, T_perc, index, max_base_height,
-           is_motif, is_trimmed) %>%
+    select(raw_sample_position, raw_control_position, sample_primary_call,
+           control_primary_call, sample_secondary_call, motif, is_trimmed, 
+           A_area, C_area, G_area, T_area, Tot.Area, 
+           A_perc, C_perc, G_perc, T_perc, 
+           index, max_base, max_base_height) %>%
     ungroup()
   
-  output_sample_alt = output_stats %>%
+  output_sample_alt = suppressMessages(
+    output_stats %>%
     select(-motif) %>%
-    left_join(sample_df) %>%
+    left_join(alignment_df) %>%
     mutate(perc = 100 * .[[paste0(edit, "_perc")]]) %>%
-    mutate(index = position) %>%
+    mutate(index = raw_sample_position) %>%
     mutate(base = edit) %>%
     mutate(sig = ifelse(edit_sig, "Significant", "Non-significant")) %>%
-    mutate(tally = row.names(.)) %>%
+    group_by(sig) %>%
+    mutate(tally = n()) %>%
     select(index, base, perc, sig, tally) %>%
     filter(!is.na(sig))
+  )
   
   motif_positions = motif_part_of_sample %>%
     mutate(ctrl_post_aligned_index = index) %>%
@@ -180,7 +232,8 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
     "intermediate_data" = list("raw_sample_df"=raw_sample_df,
                                "sample_alt"=motif_part_of_sample %>%
                                  filter(expected_motif == wt) %>%
-                                 mutate(ctrl_file = ctrl_file),
+                                 mutate(ctrl_file = ctrl_file) %>%
+                                 mutate(sample_file = sample_file),
                                "output_sample_alt" = output_sample_alt,
                                "motif_positions" = motif_part_of_sample$position)
   )

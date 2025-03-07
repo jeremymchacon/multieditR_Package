@@ -393,177 +393,6 @@ tableEditingData = function(editing_data) {
     dplyr::rename(Base = base, Significance = sig)
 }
 
-# Define geom_chromatogram function
-# input the sanger object, start index, end index and output chromatogram with underlying base percents
-#' @importFrom sangerseqR makeBaseCalls
-#' @importFrom dplyr as_tibble as_data_frame summarize rename mutate arrange filter inner_join
-#' @importFrom tibble rowid_to_column
-#' @importFrom tidyr gather 
-#' @importFrom magrittr `%>%`
-#' @import ggplot2
-geom_chromatogram = function(sanger, start_index, end_index){
-
-  # define bases
-  bases = c("A", "C", "G", "T")
-
-  # define the basecalls  in the sanger object initially to set the proper phasing to the data
-  sanger = sangerseqR::makeBaseCalls(sanger)
-
-  # make rawtraces from the sanger trace matrix
-  rawtraces = sanger@traceMatrix %>%
-    # the trace matrix is the scatter of points that make up the chromatogram
-    # convert the large matrix of traces into a tibble object
-    dplyr::as_data_frame() %>%
-    # name the columns by base channel
-    dplyr::rename(A = V1, C = V2, G = V3, `T` = V4) %>%
-    # create a column 1 through n trace measurements taken
-    tibble::rowid_to_column("x")
-
-  # create the peakPosMatrix giving the x coordinate of each basecall
-  peakPosMatrix = sanger@peakPosMatrix %>% dplyr::as_data_frame()
-  # create column names for each channel
-  colnames(peakPosMatrix) = c("A", "C", "G", "T")
-  # format peakPosMatrix
-  peakPosMatrix = peakPosMatrix %>%
-    # add the basecall for each position
-    dplyr::mutate(basecall = sanger@primarySeq %>% as.character %>% strsplit(split = "") %>% unlist()) %>%
-    dplyr::rowid_to_column("index") %>%
-    tidyr::gather(base, x, A:`T`) %>%
-    dplyr::filter(basecall == base) %>%
-    dplyr::arrange(index) %>%
-    dplyr::select(index, basecall, x)
-
-  # Make the traces data frame
-  traces = peakPosMatrix %>%
-    # filter only the trace information at positions that are registered as the position of the peak height
-    dplyr::inner_join(., rawtraces) %>%
-    # define the previous base index
-    dplyr::mutate(x_1 = lag(x, default = 1)) %>%
-    # start the chromatogram for each base as the position between the two bases divided by two
-    # start the chromatogram as the x coordinate bewteen the first  base of interest and the n-1 base
-    dplyr::mutate(start = floor((x + x_1) / 2)) %>%
-    # end the chromatogram for each base as the position
-    # empirically derived I believe
-    dplyr::mutate(end = lead(start, default = (max(x) + 6))) %>%
-    # define the total area for each basecall
-    dplyr::mutate(Tot.Area = A + C + G + `T`) %>%
-    # calculate percent heights for each base from the total area
-    dplyr::mutate(A_perc = round(A*100/Tot.Area),
-                  C_perc = round(C*100/Tot.Area),
-                  G_perc = round(G*100/Tot.Area),
-                  T_perc = round(`T`*100/Tot.Area))
-
-  # The position list is for every basecall, these are the corresponding x-coordinates
-  # This is a list object, where the primary index of the list represents the basecall index
-  # The vector element under each index represents the x-coordinates of the peakAmpMatrix for each basecall
-  position_list = mapply(FUN = seq,
-                         from = c(1, traces$end),
-                         to = c(traces$end, max(traces$end)+10),
-                         by = 1) %>%
-    head(., -1)
-
-  # make the names of the position_list indentical to the index of the position list
-  names(position_list) = c(1:length(position_list))
-
-  indices = ldply(position_list, "data.frame") %>%
-    dplyr::rename(index = ".id", x = "data.frame") %>%
-    dplyr::as_tibble() %>%
-    dplyr::mutate(index = as.numeric(index))
-
-  # This joins the basecall index to the rawtrace x coordinate based data
-  rawtraces %<>% dplyr::inner_join(., indices)
-
-  # Enter the plotting based on the indices
-  # defines the basecall_indices as the start and end indices of interest for making the chromatogram
-  basecall_indices = c(start_index, end_index)
-
-  # determine the start and end x coordinates of the rawtraces to filter on for plotting
-  index_filters = rawtraces %>%
-    # filter the rawtraces data to just include the indices that are within the region of interest
-    # some of the bleedthrough is still observed at this point
-    dplyr::filter(index >= basecall_indices[1] & index <= basecall_indices[2]) %>%
-    # the x coordinates corresponding to the region of interest
-    .$x %>%
-    # takes the min and max of the peakAmpMatrix x cooridinates
-    quantile(., c(0, 1)) %>%
-    # adds an x coordinate cushion
-    {. + c(-6, 6)}
-
-  # gather the rawtraces data for ggplot format
-  # filter in only traces that fall within the x coordinates rawtraces index filter
-  # could merge this line of code with the preceeding index_filters chunk
-  plotTraces = rawtraces %>%
-    tidyr::gather(base, height, A:`T`) %>%
-    dplyr::filter(x >= index_filters[1] & x <= index_filters[2]) %>%
-    # This join operation is used to creat a base code that later allows a manual gradient to be employed
-    dplyr::inner_join(.,
-               data.frame(stringsAsFactors = FALSE,
-                          base = c("A", "C", "G", "T"),
-                          base_code = c("1000", "2000", "3000", "4000"))
-    ) %>%
-    # calculate the min and max height for geom_ribbon
-    dplyr::mutate(max_height = pmax(height), min_height = 0)
-
-  # calculate the y coordinates for the chromatogram
-  y_bases = max(plotTraces$height)*(1/2) %>%
-    {.*-c(2/11,4/11,6/11,8/11,10/11)}
-
-  # calculate the number of bases involved
-  n_bases = basecall_indices[2]-basecall_indices[1]+1
-
-  # calculate the x coordinates for the chromatogram
-  x_bases = (index_filters[2]-index_filters[1]) %>%
-    {.*(seq(2, 2*n_bases+1, 2)/(2*n_bases + 2))} %>%
-    {.+index_filters[1]}
-
-  tile_plot = traces %>%
-    dplyr::filter(index >= basecall_indices[1] & index <= basecall_indices[2]) %>%
-    dplyr::select(basecall, A_perc, C_perc, G_perc, T_perc) %>%
-    tidyr::gather(col, labels, basecall:T_perc) %>%
-    dplyr::mutate(y = rep(y_bases, each = n_bases),
-                  x = rep(x_bases, times = 5))
-
-  base_annotation = data.frame(label = bases,
-                               x = rep(min(plotTraces$x), 4),
-                               y = tail(rev(sort(unique(tile_plot$y))), -1))
-
-  ## Create functions for the fill color palettes
-  colors1 = colorRampPalette(colors = c("white", "white"))
-  colors2 = colorRampPalette(colors = c("white", "#e41a1c"))
-  colors3 = colorRampPalette(colors = c("#e41a1c", "#e41a1c"))
-  colors4 = colorRampPalette(colors = c("#e41a1c", "#377eb8"))
-
-  # establish a fill_key vector
-  fill_key = c(0:6, 7:19, 20:49, 50:100, 1000, 2000, 3000, 4000)
-
-  # establish the colors in the fill_key
-  fill_colors = c(colors1(length(0:6)),
-                  colors2(length(7:19)),
-                  colors3(length(20:49)),
-                  colors4(length(50:100)),
-                  "#32CD32", "#4169E1", "#121212", "#FC4338")
-
-  # tie together the fill_key and fill_colors using the names() function
-  names(fill_colors) = fill_key
-
-  chromatogram = plotTraces %>%
-    dplyr::mutate(max_height = pmax(height), min_height = 0) %>%
-    ggplot(data = ., aes(x = x, y = height)) +
-    geom_ribbon(aes(ymin = min_height, ymax = max_height, color = base, fill = base_code), alpha = 0.1) +
-    scale_color_manual(values = c("A" = "#4daf4a", "C" = "#377eb8", "G" = "black", "T" = "#e41a1c")) +
-    geom_tile(data = filter(tile_plot, col != "basecall"),
-              aes(y = y, x = x, fill = as.character(as.numeric(labels))), color = "black") +
-    scale_fill_manual(values = fill_colors) +
-    geom_text(data = tile_plot, aes(x = x, y = y, label = labels), color = "black") +
-    geom_text(data = base_annotation, aes(x = x, y = y, label = label), color = "black") +
-    theme_void(base_size = 36) +
-    theme(legend.position = "none",
-          aspect.ratio = 1/1.5)
-
-  return(chromatogram)
-}
-
-
 #' @importFrom dplyr as_tibble distinct case_when summarize pull rename mutate arrange filter inner_join ungroup
 #' @importFrom tidyr gather pivot_longer
 #' @importFrom magrittr `%>%`
@@ -572,9 +401,9 @@ geom_chromatogram = function(sanger, start_index, end_index){
 plot_chromatogram_at_motif = function(sanger, raw_sample_df, motif, 
                                       sanger_fwd = TRUE,
                                       motif_fwd = TRUE){
-  motif_positions = c(motif_start = min(raw_sample_df$raw_sample_position[raw_sample_df$motif == 1]),
-                      motif_end = max(raw_sample_df$raw_sample_position[raw_sample_df$motif == 1])+1)
+  motif_locations = raw_sample_df$raw_sample_position[raw_sample_df$motif != -1]
   
+  # first collect the data which will make up the tiling
   sanger_peaks = raw_sample_df %>%
     dplyr::rename(A = A_area) %>%
     dplyr::rename(C = C_area) %>%
@@ -590,8 +419,7 @@ plot_chromatogram_at_motif = function(sanger, raw_sample_df, motif,
   
   # we use those locations to rearrange peak_mat
   sanger_peaks_at_motif = sanger_peaks %>%
-    dplyr::filter(rowid >= motif_positions[["motif_start"]],
-           rowid < motif_positions[["motif_end"]]) %>%
+    dplyr::filter(rowid %in% motif_locations) %>%
     dplyr::mutate(motif_pos = if(sanger_fwd){
       1:nrow(.) - 0.5
     }
@@ -607,8 +435,16 @@ plot_chromatogram_at_motif = function(sanger, raw_sample_df, motif,
     dplyr::mutate(base_pos = case_when(base == "A" ~ -1/8, base == "C" ~ -2/8,
                                 base == "G" ~ -3/8, base == "T" ~ -4/8)) 
   
+  
+  # now figure out the trace_ends for each motif
+  motif_ends = raw_sample_df %>%
+    dplyr::filter(motif != -1) %>%
+    dplyr::group_by(motif) %>%
+    dplyr::summarize(motif_start = min(raw_sample_position),
+              motif_end = max(raw_sample_position))
+  
   # peakPosMatrix tells us where the peaks for the motif start and end
-  trace_ends = sangerseqR::peakPosMatrix(sangerseqR::makeBaseCalls(sanger)) %>% 
+  trace_to_position_df = sangerseqR::peakPosMatrix(sangerseqR::makeBaseCalls(sanger)) %>% 
     as.data.frame() %>%
     dplyr::mutate(base_position = if(sanger_fwd){
       1:nrow(.)
@@ -617,13 +453,55 @@ plot_chromatogram_at_motif = function(sanger, raw_sample_df, motif,
     }) %>%
     tidyr::pivot_longer(-base_position, names_to = "base", values_to = "rowid") %>%
     dplyr::filter(!is.na(rowid)) %>%
-    dplyr::filter(base_position %in% c(motif_positions[["motif_start"]], 
-                                motif_positions[["motif_end"]]-1)) %>%
-    dplyr::pull(rowid) %>% sort
-  # sometimes there are two rowid's per base position
-  trace_ends = c(min(trace_ends), max(trace_ends))
+    dplyr::group_by(base_position) %>%
+    dplyr::slice_head(n =1)
+  
+  # this holds starts and ends in trace and base positions per motif
+  motif_ends$trace_start = trace_to_position_df %>%
+    dplyr::filter(base_position %in% motif_ends$motif_start) %>%
+    dplyr::pull(rowid)
+  motif_ends$trace_end = trace_to_position_df %>%
+    dplyr::filter(base_position %in% motif_ends$motif_end) %>%
+    dplyr::pull(rowid)
   
   
+  ## get the trace df
+  full_trace_df = sangerseqR::traceMatrix(sangerseqR::makeBaseCalls(sanger)) %>%
+    as.data.frame() %>%
+    dplyr::rename(A = V1, C = V2, G = V3, `T` = V4) %>%
+    dplyr::mutate(rowid = if(sanger_fwd){
+      1:nrow(.)
+    }else{
+      rev(1:nrow(.))
+    }) %>%
+    tidyr::pivot_longer(-rowid, names_to = "base", values_to = "peak") %>%
+    dplyr::mutate(base = if(sanger_fwd){
+      base
+    }else{
+      dplyr::case_when(base == "A" ~ "T", base == "T" ~ "A", base == "C" ~ "G", base == "G" ~ "C")
+    }) %>%
+    dplyr::mutate(base_fill_code = case_when(base == "A" ~ "1000", base == "C" ~ "2000",
+                                             base == "G" ~ "3000", base == "T" ~ "4000")) 
+  
+  motif_trace_df = data.frame()
+  for (motif_id in unique(motif_ends$motif)){
+    motif_trace_df = rbind(motif_trace_df,
+                           full_trace_df %>%
+                             dplyr::filter(rowid >= motif_ends$trace_start[motif_ends$motif == motif_id] -5,
+                                    rowid <= motif_ends$trace_end[motif_ends$motif == motif_id] +5) %>%
+                             dplyr::mutate(rowpos = nchar(motif) * (motif_id -1 ) + nchar(motif) * (rowid - min(rowid)) / (max(rowid) - min(rowid)))
+                           )
+  }
+  motif_trace_df = motif_trace_df %>%
+  dplyr::mutate(rowpos = if(sanger_fwd){
+      rowpos
+    }else{
+      rev(rowpos)
+    }) %>%
+    dplyr::group_by(base) %>%
+    dplyr::mutate(trace = peak / max(peak)+1/16) %>%
+    dplyr::ungroup()
+
   
   # establish the colors in the fill_key to use a character set for the 
   # tile AND trace colors
@@ -636,33 +514,21 @@ plot_chromatogram_at_motif = function(sanger, raw_sample_df, motif,
   
   #### We plot the raw trace which has been subsetted to just the motif locations
   
-  sangerseqR::traceMatrix(sangerseqR::makeBaseCalls(sanger)) %>%
-    as.data.frame() %>%
-    dplyr::rename(A = V1, C = V2, G = V3, `T` = V4) %>%
-    dplyr::mutate(rowid = if(sanger_fwd){
-      1:nrow(.)
-    }else{
-      1:nrow(.)
-    }) %>%
-    tidyr::pivot_longer(-rowid, names_to = "base", values_to = "peak") %>%
-    dplyr::mutate(base = if(sanger_fwd){
-      base
-    }else{
-      dplyr::case_when(base == "A" ~ "T", base == "T" ~ "A", base == "C" ~ "G", base == "G" ~ "C")
-    }) %>%
-    dplyr::mutate(base_fill_code = case_when(base == "A" ~ "1000", base == "C" ~ "2000",
-                                      base == "G" ~ "3000", base == "T" ~ "4000")) %>%
-    dplyr::filter(rowid >= trace_ends[1] - 5,
-           rowid <= trace_ends[2] + 5) %>%
-    dplyr::mutate(rowpos = nchar(motif) * (rowid - min(rowid)) / (max(rowid) - min(rowid))) %>%
-    dplyr::mutate(rowpos = if(sanger_fwd){
-      rowpos
-    }else{
-      rev(rowpos)
-    }) %>%
-    dplyr::group_by(base) %>%
-    dplyr::mutate(trace = peak / max(peak)+1/16) %>%
-    dplyr::ungroup() %>%
+  # we modify the labels depending on how many motifs were found
+  motif_order = 1:nchar(motif)
+  motif_current = motif
+  if (!motif_fwd){
+    motif_current = revcom(motif)
+    motif_order = rev(motif_order)
+  }
+  motif_label = strsplit(
+    paste0(rep(motif_current, nrow(motif_ends)), collapse = ""), "")[[1]]
+  motif_pos_label = rep(motif_order, nrow(motif_ends))
+  motif_x = 1:length(motif_pos_label)-0.5
+  motif_ends$motif_colors = c("lightgray","white")[1 + motif_ends$motif %% 2]
+  
+  # put the pieces together
+  motif_trace_df %>%
     ggplot(aes(x = rowpos, ymin = 1/16, ymax = trace, 
                color =base, fill = base_fill_code))+
     geom_ribbon(alpha = 0.1)+
@@ -679,20 +545,18 @@ plot_chromatogram_at_motif = function(sanger, raw_sample_df, motif,
     theme(legend.position = "none",
           aspect.ratio = 1/1.5)+
     annotate("text", x = -0.5, y = -c(1:4)/8, label = c("A","C","G","T"))+
-    annotate("text", x = 1:nchar(motif)-0.5, y = -0, 
-             label = if(motif_fwd){
-               str_split(motif, "")[[1]]
-               }else{
-                 str_split(revcom(motif), "")[[1]]
-               })+
-    annotate("text", x = 1:nchar(motif)-0.5, y = -5/8, 
-             label = if(motif_fwd){
-               as.character(1:nchar(motif))
-             }else{
-               as.character(rev(1:nchar(motif)))
-             }
-    )+
-    annotate("text", x = 1, y = 1, label = paste0("motif given: ",motif, "\nmotif revcom below?  ", !motif_fwd), 
+    annotate("text", x = motif_x, y = -0, 
+             label = motif_label)+
+    annotate("rect", xmin = (motif_ends$motif-1)*nchar(motif), 
+             xmax = (motif_ends$motif)*nchar(motif), 
+             ymin = rep(-0.575, nrow(motif_ends)), 
+             ymax = rep(-0.675, nrow(motif_ends)),
+             fill = motif_ends$motif_colors)+
+    annotate("text", x = motif_x, y = -5/8, 
+             label = motif_pos_label
+         )+
+    annotate("text", x = 1, y = 1, 
+             label = paste0("motif given: ",motif, "\nmotif revcom below?  ", !motif_fwd), 
              hjust = 0, vjust = 0, size = 2)
 }
 

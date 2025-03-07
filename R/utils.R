@@ -337,14 +337,15 @@ results = function(fit){
     dplyr::left_join(fit$sample_data %>%
                        dplyr::mutate(raw_sample_position = index) %>%
                        dplyr::rename(position_in_motif = target_base) %>%
-                dplyr::select(raw_sample_position,position_in_motif,
+                       dplyr::mutate(expected_change = fit$expected_change) %>%
+                dplyr::select(raw_sample_position,position_in_motif,expected_change,
                               edit_pvalue, edit_padjust, edit_sig)
                 ) %>%
     dplyr::mutate(passed_trimming = !is_trimmed) %>%
     dplyr::rename(control_base = control_primary_call) %>%
     dplyr::rename(motif_number = motif) %>%
     dplyr::select(raw_sample_position, passed_trimming, motif_number, edit_sig, control_base, 
-                  sample_primary_call, sample_secondary_call, A_area, C_area,
+                  expected_change, sample_primary_call, sample_secondary_call, A_area, C_area,
                   G_area, T_area, A_perc, C_perc, G_perc, T_perc, edit_pvalue, 
                   edit_padjust, motif_seq, sample_file, control_file)
   )

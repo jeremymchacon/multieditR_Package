@@ -51,10 +51,11 @@
 #'             wt = "A", edit = "G",
 #'             phred_cutoff = 0.001, p_value = 0.05)
 #'             
-#' results(fit)
+#' tbl = results(fit)
+#' writexl::write_xlsx(tbl, "my_results.xlsx") 
 #' 
 #' plot_sample_chromatogram(fit)
-#' plot_raw_sample(fit)             
+#' plot_raw_sample(fit)       
 #'             
 #' 
 detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
@@ -264,6 +265,7 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
     "ctrl_is_revcom" = ctrl_is_revcom, 
     "motif" = motif_orig,
     "motif_fwd" = motif_fwd,
+    "expected_change" = edit,
     "intermediate_data" = list("raw_sample_df"=raw_sample_df,
                                "sample_alt"=motif_part_of_sample %>%
                                  filter(expected_motif == wt) %>%

@@ -40,33 +40,16 @@ phred_scores = data.frame(stringsAsFactors=FALSE,
                                    6e-10, 5e-10)
 )
 
-### Functions
+######
+### Analysis Functions
+######
+
+
 # Check that a string is IUPAC notation
 checkIUPAC = function(x){all(strsplit(x, "")[[1]] %in% c("A", "C", "G", "T", "U", "R", "Y", "S", "W", "K", "M", "B", "D", "H", "V", "N"))}
 
 # convert nucleotide to a factor
 nucleotide_factor = function(x){factor(x, levels = c("A", "C", "G", "T"))}
-
-make_ctrl_sanger_df = function(sanger_file){
-  base_calls = makeBaseCalls(sanger_file)
-  sanger_df = base_calls %>% peakAmpMatrix %>% data.frame()
-  bases = c("A", "C", "G", "T")
-  colnames(sanger_df) = c("A_area","C_area","G_area","T_area")
-  sanger_df %<>%
-    mutate(., max_base = {apply(., 1, which.max) %>% bases[.]}) %<>%
-    mutate(Tot.Area = A_area + C_area + G_area + T_area,
-           A_perc = A_area / Tot.Area,
-           C_perc = C_area / Tot.Area,
-           G_perc = G_area / Tot.Area,
-           T_perc = T_area / Tot.Area) %<>%
-    mutate(base_call = strsplit(x = toString(base_calls@primarySeq), split = "") %>% unlist) %<>%
-    mutate(index = 1:NROW(.)) %<>%
-    mutate(max_base_height = {ifelse(max_base == "A", A_area,
-                                     ifelse(max_base == "C", C_area,
-                                            ifelse(max_base == "G", G_area,
-                                                   ifelse(max_base == "T", T_area,NA))))})
-}
-
 
 # get_trim_points returns a vector of length 2, the first point
 # being the first position to be included, and the second being the second 
@@ -108,173 +91,12 @@ get_trim_points = function (path, cutoff = 0.001,
   return(c(trim_start, trim_finish))
 }
 
-
-abif_to_fastq = function (seqname = "sample", path, trim = TRUE, cutoff = 1,
-                          min_seq_len = 20, offset = 33, recall = FALSE)
-{
-  sangerseqr <- requireNamespace("sangerseqR")
-  stopifnot(isTRUE(sangerseqr))
-  abif <- sangerseqR::read.abif(path)
-  if (is.null(abif@data$PCON.2)) {
-    message(sprintf("failed on %s", seqname))
-    return()
-  }
-  nucseq <- substring(abif@data$PBAS.2, 1, length(abif@data$PLOC.2))
-  if (!typeof(abif@data$PCON.2) == "integer") {
-    num_quals <- utf8ToInt(abif@data$PCON.2)[1:length(abif@data$PLOC.2)]
-  }else {
-    num_quals <- abif@data$PCON.2[1:length(abif@data$PLOC.2)]
-  }
-  if (isTRUE(recall)) {
-    recalled <- sangerseqR::makeBaseCalls(sangerseqR::sangerseq(abif))
-    nucseq <- sangerseqR::primarySeq(recalled, string = TRUE)
-    if (nchar(nucseq) != length(num_quals)) {
-      trim <- FALSE
-      num_quals <- rep(60, nchar(nucseq))
-      warning("Length of quality scores does not equal length of\n              re-called base sequence, ignoring quality scores")
-    }
-  }
-  if (trim == FALSE) {
-    tmp1 = list(seqname = seqname, seq = nucseq,
-                quals = rawToChar(as.raw(num_quals + offset)))
-    return(tmp1)
-  }
-  trim_msg <- "Sequence %s can not be trimmed because it is shorter than the trim\n               segment size"
-  if (nchar(nucseq) <= min_seq_len) {
-    warning(sprintf(trim_msg, seqname))
-    return()
-  }
-  scores = cutoff - 10^(num_quals/-10)
-  running_sum <- rep(0, length(scores) + 1)
-  for (i in 1:length(scores)) {
-    num <- scores[i] + running_sum[i]
-    running_sum[i + 1] <- ifelse(num < 0, 0, num)
-  }
-  trim_start <- min(which(running_sum > 0)) - 1
-  trim_finish <- which.max(running_sum) - 2
-  if (trim_finish - trim_start < min_seq_len - 1) {
-    warning(sprintf(trim_msg, seqname))
-    return()
-  }
-  tmp2 = list(seqname = seqname, seq = substring(nucseq,
-                                                 trim_start, trim_finish), quals = rawToChar(as.raw(num_quals[trim_start:trim_finish] +
-                                                                                                      offset)))
-  return(tmp2)
-}
-
-
-make_samp_sanger_df = function(samp_sanger, ctrl_seq){
-  bases = c("A", "C", "G", "T")
-  ### Align the phase of the primary and secondary basecalls in the sample sequence to that of the control
-  ### This changes where and what the bases are called as
-  ### Returns an object of class sangerseq
-  phased_samp_sanger = samp_sanger %>%
-    makeBaseCalls(.) %>%
-    setAllelePhase(., ctrl_seq) # Does not require an actual chromatogram, so it is ammenable to just using a fasta file
-
-  ### Return a data frame from the phased sample sangerseq object with the position of each
-  ### This method appears to return higher intensities for the noise, thus we're going to trust it more for detecting noise for modelling
-  samp_peakAmpDF = phased_samp_sanger@peakPosMatrix %>%
-    as_tibble() %>%
-    dplyr::rename(A = V1, C = V2, G = V3, `T` = V4) %>%
-    # na_if(., 0) %>%
-    dplyr::mutate(primary_base_call = primarySeq(phased_samp_sanger) %>% as.character() %>% str_split(., pattern = "") %>% unlist(),
-                  secondary_base_call = secondarySeq(phased_samp_sanger) %>% as.character() %>% str_split(., pattern = "") %>% unlist()) %>%
-    dplyr::mutate(identical = {primary_base_call == secondary_base_call}) %>%
-    dplyr::mutate(row_sum = as.integer(!is.na(A)) +
-                    as.integer(!is.na(C)) +
-                    as.integer(!is.na(G)) +
-                    as.integer(!is.na(`T`))
-    ) %>%
-    dplyr::mutate(peak_pos = {ifelse(grepl("A|C|G|T", primary_base_call),
-                                     ifelse(primary_base_call == "A", A,
-                                            ifelse(primary_base_call == "C", C,
-                                                   ifelse(primary_base_call == "G", G,
-                                                          ifelse(primary_base_call == "T", `T`, "Error, stop!")))),
-                                     pmin(A, C, G, `T`, na.rm = TRUE))}) %>%
-    dplyr::mutate(A = ifelse(is.na(A), peak_pos, A) %>% as.numeric(),
-                  C = ifelse(is.na(C), peak_pos, C) %>% as.numeric(),
-                  G = ifelse(is.na(G), peak_pos, G) %>% as.numeric(),
-                  `T` = ifelse(is.na(`T`), peak_pos, `T`) %>% as.numeric())
-
-  ### Reformat df to be identical to output of make_ctrl_sanger_df()
-  samp_peakAmpDF %<>%
-    dplyr::mutate(A_area = samp_sanger@traceMatrix[samp_peakAmpDF$A, 1],
-                  C_area = samp_sanger@traceMatrix[samp_peakAmpDF$C, 2],
-                  G_area = samp_sanger@traceMatrix[samp_peakAmpDF$G, 3],
-                  T_area = samp_sanger@traceMatrix[samp_peakAmpDF$`T`, 4]) %<>%
-    dplyr::select(A_area:T_area, primary_base_call, secondary_base_call) %<>%
-    mutate(., max_base = {apply(., 1, which.max) %>% bases[.]}) %<>%
-    mutate(max_base = factor(max_base, levels = bases)) %<>%
-    mutate(Tot.Area = A_area + C_area + G_area + T_area,
-           A_perc = A_area / Tot.Area,
-           C_perc = C_area / Tot.Area,
-           G_perc = G_area / Tot.Area,
-           T_perc = T_area / Tot.Area) %>%
-    mutate(index = 1:NROW(Tot.Area)) %<>%
-    mutate(max_base_height = {ifelse(max_base == "A", A_area,
-                                     ifelse(max_base == "C", C_area,
-                                            ifelse(max_base == "G", G_area,
-                                                   ifelse(max_base == "T", T_area,NA))))})
-
-  return(samp_peakAmpDF)
-}
-
-
-
-
-align_and_trim = function(pattern_seq, subject_seq, min_continuity = 15){
-
-  gap_length = min_continuity - 1
-  raw_pattern = lapply(FUN = rep, X = 1:gap_length, x = "[A-Z]") %>%
-    lapply(FUN = paste0, X = ., collapse = "") %>%
-    unlist()
-  gsub_pattern = raw_pattern %>%
-    paste0("^", ., "-|") %>%
-    paste0(collapse = "") %>%
-    paste0(., raw_pattern %>%
-             paste0("-", ., "$|") %>%
-             paste0(collapse = ""),
-           collapse = "") %>%
-    gsub('.{1}$','', .)
-
-  input_pattern = pattern_seq
-  input_subject = subject_seq
-
-  alignment = pwalign::pairwiseAlignment(pattern = pattern_seq, subject = subject_seq)
-
-  output_pattern = alignment@pattern %>% as.character() %>% gsub(gsub_pattern, "", ., perl = T) %>% gsub("-", "", ., perl = T)
-  output_subject = alignment@subject %>% as.character() %>% gsub(gsub_pattern, "", ., perl = T) %>% gsub("-", "", ., perl = T)
-
-  while(input_pattern != output_pattern | input_subject != output_subject){
-    alignment = pwalign::pairwiseAlignment(pattern = output_pattern, subject = output_subject)
-
-    old_output_pattern = output_pattern
-    old_output_subject = output_subject
-
-    new_output_pattern = alignment@pattern %>% as.character() %>% gsub(gsub_pattern, "", ., perl = T) %>% gsub("-", "", ., perl = T)
-    new_output_subject = alignment@subject %>% as.character() %>% gsub(gsub_pattern, "", ., perl = T) %>% gsub("-", "", ., perl = T)
-
-    output_pattern = new_output_pattern
-    output_subject = new_output_subject
-
-    input_pattern = old_output_pattern
-    input_subject = old_output_subject
-  }
-
-  return(list("pattern" = alignment@pattern %>% as.character() %>% gsub("-", "", .),
-              "subject" = alignment@subject %>% as.character() %>% gsub("-", "", .),
-              "alignment" = alignment))
-}
-
 subchar <- function(string, pos, char) {
   for(i in pos) {
     substr(string, i, i) = char
   }
   string
 }
-
-
 
 make_ZAGA_df = function(sanger_df, p_adjust){
   nvals <- list()
@@ -397,8 +219,103 @@ plot_raw_sample = function(fit){
     annotate("text", x = max(tmp$index) *0.12, y = 13, label = "motif bases", hjust = 0)
 }
 
-### Plotting functions
 
+calculate_edit_pvalue = function(motif_part_of_sample, zaga_parameters, wt, edit, p_value){
+  # this reproduces the functionality of "pvalue_adjust" from Mitch's code
+  zaga_params_edit_base_only = zaga_parameters %>%
+    filter(base == edit)
+  
+  # get the potential edited rows
+  potential_edits = motif_part_of_sample %>%
+    filter(expected_motif == wt)
+  suppressMessages(
+    motif_part_of_sample %>%
+      left_join(
+        potential_edits %>%
+          mutate(edit_pvalue = mapply(FUN = gamlss.dist::dZAGA, x = .[[paste0(edit, "_area")]],
+                                      mu = zaga_params_edit_base_only[1, "mu"],
+                                      sigma = zaga_params_edit_base_only[1, "sigma"],
+                                      nu = zaga_params_edit_base_only[1, "nu"])) %>% 
+          mutate(edit_padjust = p.adjust(edit_pvalue, "BH")) %>% 
+          mutate(edit_sig = edit_padjust < p_value)
+      )
+  )
+}
+
+
+make_sample_df = function(sample_sanger){
+  # this creates the basic dataframe we use; it contains the peaks per base
+  # for all positions in the sanger--we add trimming information later
+  # the gist of getting peak data is as follows:
+  # for each position, find the trace location where the peak is.
+  # if a base did not have a peak, then figure out which base had the highest peak
+  # and where. grab the value from that trace location for the NA bases. 
+  # peakPosMatrix tells us where peaks were, if there was one. 
+  
+  peak_locs = sangerseqR::makeBaseCalls(sample_sanger)@peakPosMatrix %>% 
+    as_tibble()
+  names(peak_locs) = bases
+  peak_locs$max_base = sangerseqR::makeBaseCalls(sample_sanger)@primarySeq %>%
+    as.character() %>% strsplit("") %>% {.[[1]]}
+  
+  ### Once this runs, it's the same as samp_peakAmpDF from before
+  for (i in 1:nrow(peak_locs)){
+    row = unlist(peak_locs[i,1:4])
+    peak_vals = sapply(1:4, FUN = function(x){
+      if (is.na(row[x])){return(NA)}
+      else{
+        return(sample_sanger@traceMatrix[row[x], x])
+      }})
+    peak_locs$A[i] = ifelse(is.na(peak_locs$A[i]), row[peak_locs$max_base[i]], peak_locs$A[i])
+    peak_locs$C[i] = ifelse(is.na(peak_locs$C[i]), row[peak_locs$max_base[i]], peak_locs$C[i])
+    peak_locs$G[i] = ifelse(is.na(peak_locs$G[i]), row[peak_locs$max_base[i]], peak_locs$G[i])
+    peak_locs$T[i] = ifelse(is.na(peak_locs$T[i]), row[peak_locs$max_base[i]], peak_locs$T[i])
+    
+  }
+  
+  peak_locs$A_area = sample_sanger@traceMatrix[peak_locs$A, 1]
+  peak_locs$C_area = sample_sanger@traceMatrix[peak_locs$C, 2]
+  peak_locs$G_area = sample_sanger@traceMatrix[peak_locs$G, 3]
+  peak_locs$T_area = sample_sanger@traceMatrix[peak_locs$T, 4]
+  peak_locs$A_perc = peak_locs$A_area/ rowSums(peak_locs[c("A_area","C_area","G_area","T_area")])
+  peak_locs$C_perc = peak_locs$C_area/ rowSums(peak_locs[c("A_area","C_area","G_area","T_area")])
+  peak_locs$G_perc = peak_locs$G_area/ rowSums(peak_locs[c("A_area","C_area","G_area","T_area")])
+  peak_locs$T_perc = peak_locs$T_area/ rowSums(peak_locs[c("A_area","C_area","G_area","T_area")])
+  
+  peak_locs$position = 1:nrow(peak_locs)
+  peak_locs
+}
+
+revcom = function(x){as.character(Biostrings::reverseComplement(Biostrings::DNAString(x)))}
+
+is_revcom_ctrl_better = function(init_sample_seq,
+                                 init_ctrl_seq){
+  init_sample_seq = as.character(init_sample_seq)
+  init_ctrl_seq = as.character(init_ctrl_seq)
+  fwd_score = score(pwalign::pairwiseAlignment(init_sample_seq, init_ctrl_seq))
+  rev_score = score(pwalign::pairwiseAlignment(init_sample_seq, 
+                                               revcom(init_ctrl_seq)))
+  return(rev_score > fwd_score)
+}
+
+is_file_ab1 = function(filepath){
+  # checks if the file is .ab1, looks like a fasta, or neither
+  if (!file.exists(filepath)){
+    return(FALSE)
+  }
+  result = tryCatch({
+    sangerseqR::readsangerseq(filepath)
+    return(TRUE)
+  },error =
+    function(e){
+      FALSE
+    })
+  return(result)
+}
+
+####################
+### Plotting functions
+##################
 
 # Function for plotting trimmed sample data
 plot_trimmed_sample = function(fit){
@@ -783,125 +700,3 @@ plot_control_chromatogram = function(fit){
 }
 
 
-load_ctrl_seq = function(ctrl_file,
-                         ctrl_is_fasta,
-                         phred_cutoff){
-  # Make sangerseq objects
-  # Need to flesh out the TRUE statement branch
-  if(ctrl_is_fasta){ 
-    fasta_lines = read_lines(ctrl_file)
-    input_seq = paste0(fasta_lines[2:length(fasta_lines)], collapse = "")
-    init_ctrl_seq = input_seq
-    ctrl_fastq = list()
-    ctrl_fastq$seq = input_seq
-    ctrl_df = data.frame(max_base = init_ctrl_seq %>% base::strsplit(., split = "") %>% unlist(),
-                         base_call = init_ctrl_seq %>% base::strsplit(., split = "") %>% unlist()) %>%
-      mutate(index = 1:NROW(max_base))
-    ctrl_sanger = NULL
-  } else{
-    ctrl_sanger = readsangerseq(ctrl_file)
-    ctrl_df = make_ctrl_sanger_df(ctrl_sanger)
-    init_ctrl_seq = ctrl_df$base_call %>% paste0(., collapse = "")
-    ctrl_fastq = abif_to_fastq(path = ctrl_file, cutoff = phred_cutoff)
-  }
-  return(list(
-    "init_ctrl_seq" = init_ctrl_seq,
-    "ctrl_fastq" = ctrl_fastq,
-    "ctrl_df" = ctrl_df,
-    "ctrl_sanger" = ctrl_sanger
-  ))
-}
-
-
-calculate_edit_pvalue = function(motif_part_of_sample, zaga_parameters, wt, edit, p_value){
-  # this reproduces the functionality of "pvalue_adjust" from Mitch's code
-  zaga_params_edit_base_only = zaga_parameters %>%
-    filter(base == edit)
-  
-  # get the potential edited rows
-  potential_edits = motif_part_of_sample %>%
-    filter(expected_motif == wt)
-  suppressMessages(
-    motif_part_of_sample %>%
-      left_join(
-        potential_edits %>%
-          mutate(edit_pvalue = mapply(FUN = gamlss.dist::dZAGA, x = .[[paste0(edit, "_area")]],
-                                      mu = zaga_params_edit_base_only[1, "mu"],
-                                      sigma = zaga_params_edit_base_only[1, "sigma"],
-                                      nu = zaga_params_edit_base_only[1, "nu"])) %>% 
-          mutate(edit_padjust = p.adjust(edit_pvalue, "BH")) %>% 
-          mutate(edit_sig = edit_padjust < p_value)
-      )
-  )
-}
-
-
-make_sample_df = function(sample_sanger){
-  # this creates the basic dataframe we use; it contains the peaks per base
-  # for all positions in the sanger--we add trimming information later
-  # the gist of getting peak data is as follows:
-  # for each position, find the trace location where the peak is.
-  # if a base did not have a peak, then figure out which base had the highest peak
-  # and where. grab the value from that trace location for the NA bases. 
-  # peakPosMatrix tells us where peaks were, if there was one. 
-  
-  peak_locs = sangerseqR::makeBaseCalls(sample_sanger)@peakPosMatrix %>% 
-    as_tibble()
-  names(peak_locs) = bases
-  peak_locs$max_base = sangerseqR::makeBaseCalls(sample_sanger)@primarySeq %>%
-    as.character() %>% strsplit("") %>% {.[[1]]}
-  
-  ### Once this runs, it's the same as samp_peakAmpDF from before
-  for (i in 1:nrow(peak_locs)){
-    row = unlist(peak_locs[i,1:4])
-    peak_vals = sapply(1:4, FUN = function(x){
-      if (is.na(row[x])){return(NA)}
-      else{
-        return(sample_sanger@traceMatrix[row[x], x])
-      }})
-    peak_locs$A[i] = ifelse(is.na(peak_locs$A[i]), row[peak_locs$max_base[i]], peak_locs$A[i])
-    peak_locs$C[i] = ifelse(is.na(peak_locs$C[i]), row[peak_locs$max_base[i]], peak_locs$C[i])
-    peak_locs$G[i] = ifelse(is.na(peak_locs$G[i]), row[peak_locs$max_base[i]], peak_locs$G[i])
-    peak_locs$T[i] = ifelse(is.na(peak_locs$T[i]), row[peak_locs$max_base[i]], peak_locs$T[i])
-    
-  }
-  
-  peak_locs$A_area = sample_sanger@traceMatrix[peak_locs$A, 1]
-  peak_locs$C_area = sample_sanger@traceMatrix[peak_locs$C, 2]
-  peak_locs$G_area = sample_sanger@traceMatrix[peak_locs$G, 3]
-  peak_locs$T_area = sample_sanger@traceMatrix[peak_locs$T, 4]
-  peak_locs$A_perc = peak_locs$A_area/ rowSums(peak_locs[c("A_area","C_area","G_area","T_area")])
-  peak_locs$C_perc = peak_locs$C_area/ rowSums(peak_locs[c("A_area","C_area","G_area","T_area")])
-  peak_locs$G_perc = peak_locs$G_area/ rowSums(peak_locs[c("A_area","C_area","G_area","T_area")])
-  peak_locs$T_perc = peak_locs$T_area/ rowSums(peak_locs[c("A_area","C_area","G_area","T_area")])
-  
-  peak_locs$position = 1:nrow(peak_locs)
-  peak_locs
-}
-
-revcom = function(x){as.character(Biostrings::reverseComplement(Biostrings::DNAString(x)))}
-
-is_revcom_ctrl_better = function(init_sample_seq,
-                                 init_ctrl_seq){
-  init_sample_seq = as.character(init_sample_seq)
-  init_ctrl_seq = as.character(init_ctrl_seq)
-  fwd_score = score(pwalign::pairwiseAlignment(init_sample_seq, init_ctrl_seq))
-  rev_score = score(pwalign::pairwiseAlignment(init_sample_seq, 
-                                      revcom(init_ctrl_seq)))
-  return(rev_score > fwd_score)
-}
-
-is_file_ab1 = function(filepath){
-  # checks if the file is .ab1, looks like a fasta, or neither
-  if (!file.exists(filepath)){
-    return(FALSE)
-  }
-  result = tryCatch({
-    sangerseqR::readsangerseq(filepath)
-    return(TRUE)
-  },error =
-    function(e){
-      FALSE
-    })
-  return(result)
-}

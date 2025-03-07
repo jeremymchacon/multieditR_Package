@@ -23,21 +23,27 @@
 # 4. Find all instances of motif in control sequence, allowing zero mismatches (because otherwise small motifs would have too many false positives)
 # 5. extract the trimmed, non-motif parts of the sample and use it to build the null distribution with ZAGA
 # 6. calculate the p-value for all wt -> edit transitions using the ZAGA statistics and BH adjustments
+#' @export
+#' @importFrom magrittr `%>%`
+#' @importFrom dplyr group_by ungroup select left_join distinct case_when summarize pull rename mutate arrange filter inner_join ungroup
+#' @importFrom sangerseqR readsangerseq makeBaseCalls
+#' @importFrom Biostrings countPattern matchPattern
+#' @importFrom pwalign pairwiseAlignment alignedSubject alignedPattern
 detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
                             phred_cutoff = 0.00001, p_value = 0.01){
   
   # get the sequences
   sample_sanger = sangerseqR::readsangerseq(sample_file)
-  sample_seq = makeBaseCalls(sample_sanger) %>% 
+  sample_seq = sangerseqR::makeBaseCalls(sample_sanger) %>% 
     {.@primarySeq} %>%
     as.character()
-  secondary_seq = makeBaseCalls(sample_sanger) %>% 
+  secondary_seq = sangerseqR::makeBaseCalls(sample_sanger) %>% 
     {.@secondarySeq} %>%
     as.character()
   # get the control sequence and put it into "ctrl_seq"
   if (is_file_ab1(ctrl_file)){
     ctrl_sanger = sangerseqR::readsangerseq(ctrl_file)
-    base_calls = makeBaseCalls(ctrl_sanger)
+    base_calls = sangerseqR::makeBaseCalls(ctrl_sanger)
     ctrl_seq = base_calls@primarySeq %>% as.character()
   }else{
     ctrl_sanger = NA
@@ -60,7 +66,7 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
   }
   
   # make sure at least one motif is findable in the control
-  n_motif_alignments_to_ctrl = countPattern(pattern = Biostrings::DNAString(motif), 
+  n_motif_alignments_to_ctrl = Biostrings::countPattern(pattern = Biostrings::DNAString(motif), 
                                             subject =Biostrings::DNAString(ctrl_seq),
                                             max.mismatch = 1)
   if (n_motif_alignments_to_ctrl == 0){
@@ -70,16 +76,16 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
   
   #### this will hold our main sequence table
   sample_df = make_sample_df(sample_sanger) %>%
-    rename(raw_sample_position = position)
+    dplyr::rename(raw_sample_position = position)
   
   
   # apply the control sequence to the sample sequence. 
   control_alignment = pwalign::pairwiseAlignment(pattern = DNAString(ctrl_seq), 
                                         subject = DNAString(sample_seq))
   
-  aligned_sample = as.character(alignedSubject(control_alignment))
+  aligned_sample = as.character(pwalign::alignedSubject(control_alignment))
   aligned_sample = strsplit(aligned_sample, "")[[1]]
-  aligned_control = as.character(alignedPattern(control_alignment))
+  aligned_control = as.character(pwalign::alignedPattern(control_alignment))
   aligned_control = strsplit(aligned_control, "")[[1]]
   
   # figure out the raw sample position
@@ -95,13 +101,13 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
   
   # bind the sample_df, which holds quality scores and percentages
   alignment_df = suppressMessages(
-    left_join(alignment_df, sample_df)
+    dplyr::left_join(alignment_df, sample_df)
   )
   # also bind the secondary call in the sample
   secondary_call = data.frame(sample_secondary_call = strsplit(secondary_seq, "")[[1]],
                               raw_sample_position = 1:nchar(secondary_seq))
   alignment_df = suppressMessages(
-    left_join(alignment_df, secondary_call)
+    dplyr::left_join(alignment_df, secondary_call)
   )
   
   
@@ -117,14 +123,14 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
     end_pos = trim_points[2]    
   }
   
-  alignment_df$trimmed = case_when(alignment_df$raw_sample_position < start_pos ~ TRUE,
+  alignment_df$trimmed = dplyr::case_when(alignment_df$raw_sample_position < start_pos ~ TRUE,
                                    alignment_df$raw_sample_position >= end_pos ~ TRUE,
                                    .default = FALSE)
   
   # find all alignments of the motif to the control sequence, now we allow zero
   # mismatches because if the motif is tiny, we don't want clutter
   
-  motif_alignments_to_ctrl = matchPattern(pattern = DNAString(motif), 
+  motif_alignments_to_ctrl = Biostrings::matchPattern(pattern = DNAString(motif), 
                                           subject = DNAString(ctrl_seq), 
                                           max.mismatch = 0)
   motif_alignments = motif_alignments_to_ctrl@ranges %>% as.data.frame()
@@ -156,8 +162,8 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
   motif_part_of_sample$ctrl_index = motif_part_of_sample$raw_control_position
   # this should be used for generating the NULL; only keep the trimmed part
   nonmotif_part_of_sample = alignment_df %>%
-    filter(motif == -1) %>%
-    filter(!trimmed)
+    dplyr::filter(motif == -1) %>%
+    dplyr::filter(!trimmed)
   
   
   # pass it to the ZAGA function
@@ -171,28 +177,28 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
   # rearrange results to match previous version
   sample_data = suppressMessages(
     output_stats %>%
-    left_join(alignment_df %>% 
+      dplyr::left_join(alignment_df %>% 
                 select(-motif))  %>%
-    select(-motif) %>%
-    mutate(motif = motif) %>%
-    mutate(target_base = row.names(.)) %>% 
-    filter(!is.na(edit_sig)) %>%
-    mutate(ctrl_max_base = expected_motif) %>%
-    mutate(sample_file = sample_file) %>%
-    mutate(expected_base = expected_motif) %>%
-    mutate(sample_file = sample_file) %>%
-    mutate(passed_trimming = !trimmed) %>%
-    select(passed_trimming, target_base, motif, ctrl_max_base, expected_base, max_base, sample_secondary_call,
+      dplyr::select(-motif) %>%
+      dplyr::mutate(motif = motif) %>%
+      dplyr::mutate(target_base = row.names(.)) %>% 
+      dplyr::filter(!is.na(edit_sig)) %>%
+      dplyr::mutate(ctrl_max_base = expected_motif) %>%
+      dplyr::mutate(sample_file = sample_file) %>%
+      dplyr::mutate(expected_base = expected_motif) %>%
+      dplyr::mutate(sample_file = sample_file) %>%
+      dplyr::mutate(passed_trimming = !trimmed) %>%
+      dplyr::select(passed_trimming, target_base, motif, ctrl_max_base, expected_base, max_base, sample_secondary_call,
            A_perc, C_perc, G_perc, T_perc, 
            edit_pvalue, edit_padjust, edit_sig, index, sample_file)
   )
   
   raw_sample_df = alignment_df %>%
-    mutate(Tot.Area = A_area + C_area + G_area + T_area) %>%
-    group_by(raw_sample_position) %>%
-    mutate(max_base_height = max(A_area, C_area, G_area, T_area)) %>% 
-    mutate(index = raw_sample_position) %>%
-    mutate(is_trimmed = trimmed) %>%
+    dplyr::mutate(Tot.Area = A_area + C_area + G_area + T_area) %>%
+    dplyr::group_by(raw_sample_position) %>%
+    dplyr::mutate(max_base_height = max(A_area, C_area, G_area, T_area)) %>% 
+    dplyr::mutate(index = raw_sample_position) %>%
+    dplyr::mutate(is_trimmed = trimmed) %>%
     ungroup() %>%
     select(raw_sample_position, raw_control_position, sample_primary_call,
            control_primary_call, sample_secondary_call, motif, is_trimmed, 
@@ -203,22 +209,22 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
   
   output_sample_alt = suppressMessages(
     output_stats %>%
-    select(-motif) %>%
-    left_join(alignment_df) %>%
-    mutate(perc = 100 * .[[paste0(edit, "_perc")]]) %>%
-    mutate(index = raw_sample_position) %>%
-    mutate(base = edit) %>%
-    mutate(sig = ifelse(edit_sig, "Significant", "Non-significant")) %>%
-    group_by(sig) %>%
-    mutate(tally = n()) %>%
-    select(index, base, perc, sig, tally) %>%
-    filter(!is.na(sig))
+      dplyr::select(-motif) %>%
+      dplyr::left_join(alignment_df) %>%
+      dplyr::mutate(perc = 100 * .[[paste0(edit, "_perc")]]) %>%
+      dplyr::mutate(index = raw_sample_position) %>%
+      dplyr::mutate(base = edit) %>%
+      dplyr::mutate(sig = ifelse(edit_sig, "Significant", "Non-significant")) %>%
+      dplyr::group_by(sig) %>%
+      dplyr::mutate(tally = n()) %>%
+      dplyr::select(index, base, perc, sig, tally) %>%
+      dplyr::filter(!is.na(sig))
   )
   
   motif_positions = motif_part_of_sample %>%
-    mutate(ctrl_post_aligned_index = index) %>%
-    mutate(motif_id = 1) %>% # relic from when > 1 motif could be found
-    select(ctrl_post_aligned_index, motif_id)
+    dplyr::mutate(ctrl_post_aligned_index = index) %>%
+    dplyr::mutate(motif_id = 1) %>% # relic from when > 1 motif could be found
+    dplyr::select(ctrl_post_aligned_index, motif_id)
   
   output = list(
     "sample_data" = sample_data,

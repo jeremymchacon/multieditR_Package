@@ -3,10 +3,9 @@ Type: Package
 Title: multEditR Detects Base Edits from Sanger Sequencing Data
 Version: 0.1.0
 Author: Mitch Kluesner, Jeremy Chacón
-Maintainer: The package maintainer <yourself@somewhere.net>
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
-License: What license is it under?
+Maintainer: Jeremy Chacón <chaco001@umn.edu>
+Description: This package loads sample sanger sequence(s), control sanger sequences or fasta files, and motifs, and detects edits in certain bases using the relative heights of the sanger trace. 
+License: MIT
 Encoding: UTF-8
 LazyData: true
 BiocViews:
@@ -30,3 +29,4 @@ Depends: R (>= 4.1.0),
 Suggests: 
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
+RoxygenNote: 7.3.2

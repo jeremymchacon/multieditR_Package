@@ -8,7 +8,8 @@
 # Please only copy and/or distribute this script with proper citation of 
 # multiEditR publication
 ###########################################################################################
-
+#' @export
+#' @importFrom readxl read_excel
 load_parameters_file = function(path){
   x = readxl::read_excel(path)
   colnames(x)[1:7] =  c("sample_name", "sample_file", "ctrl_file", "motif",
@@ -16,6 +17,7 @@ load_parameters_file = function(path){
   x
 }
 
+#' @export
 load_example_params = function(){
   params = load_parameters_file(paste0(system.file("extdata", package = "multiEditR"), "/parameters.xlsx"))
   ext_path = system.file("extdata", package = "multiEditR")
@@ -24,13 +26,15 @@ load_example_params = function(){
   params
 }
 
+#' @export
+#' @importFrom writexl write_xlsx
 save_batch_skeleton = function(path){
   params = load_example_params()
   writexl::write_xlsx(params, path)
 }
 
 
-
+#' @export
 detect_edits_batch = function(params = NULL){
   if (is.null(params)){
     cat("detect_edits_batch must get a params dataframe, or the path to an xlsx file which can be coerced to the correctly formatted data.frame. 
@@ -92,6 +96,10 @@ detect_edits_batch = function(params = NULL){
   fits
 }  
 
+#' @export
+#' @importFrom magrittr `%>%`
+#' @importFrom dplyr mutate select
+#' @importFrom plyr ldply
 get_batch_results_table = function(fits){
   # toss fits which failed
   fits = fits[sapply(fits, FUN = function(x){x$completed})]
@@ -106,16 +114,23 @@ get_batch_results_table = function(fits){
                   edit_sig, edit_pvalue, edit_padjust, A_perc, C_perc, G_perc, T_perc, sample_file)
 }
 
+#' @export
+#' @importFrom magrittr `%>%`
+#' @importFrom dplyr mutate select
+#' @importFrom tidyr pivot_wider
+#' @importFrom plyr ldply
 get_batch_stats_table = function(fits){
   # toss fits which failed
   fits = fits[sapply(fits, FUN = function(x){x$completed})]
   fits %>% lapply(., "[[", 2) %>%
     plyr::ldply(., "tibble") %>%
-    mutate(base = paste0(base, " fillibens coef.")) %>%
+    dplyr::mutate(base = paste0(base, " fillibens coef.")) %>%
     dplyr::select(sample_name, base, fillibens) %>%
-    pivot_wider(names_from = base, values_from = fillibens)
+    tidyr::pivot_wider(names_from = base, values_from = fillibens)
 }
 
+#' @export
+#' @importFrom rmarkdown render
 create_multiEditR_report = function(batch_results, params, path = "./multiEditR_batch_results.html"){
   message("rendering document, this could take a couple of minutes. When it is done, open the html in a web browser.")
   template = paste0(system.file(package = "multiEditR"), "/batch_report_template.Rmd")

@@ -46,25 +46,26 @@ After fitting is complete, multiple graphs and tables can be made:
 
 ```
 
-# chromatogram of predicted edits in sample
+# obtain full data table 
+tbl = results(fit)
+# optionally save it
+writexl::write_xlsx(tbl, "my_results.xlsx") 
+
+
+# chromatogram of predicted edits in sample, for all motifs found
 plot_sample_chromatogram(fit)
 
-# chromatogram of predicts "edits" in control
+# chromatogram of predicts "edits" in control, for all motifs found
 plot_control_chromatogram(fit)
 
 # percent signal of basecalls in sample
 plot_raw_sample(fit)
 
-# percent noise of basecalls 
-plot_trimmed_sample(fit)
-
 # height of significant and non-significant edits
 plot_editing_barplot(fit)
 
-# main table
-result = fit$sample_data 
-# secondary table
-stats = fit$statistical_parameters 
+# list of all internals
+str(fit)
 ```
 
 ## Batch Mode
@@ -101,7 +102,7 @@ Or access a single fit model
 
 ```
 fit1 = fits[[1]] 
-print(fit1$sample_name)
+results(fit1)
 plot_sample_chromatogram(fit1)
 ```
 
@@ -113,11 +114,5 @@ setwd("your/directory/of/interest/to/write/files")
 # Run the report, which may take a few minutes
 create_multiEditR_report(fits, params, "my_html_report.html")
 ```
-
-Known issues:
-
-- sometimes motifs get trimmed due to quality, resulting in chromatograms which seem shorter than expected
-
-- sometimes the relative position of the edited bases are off by a fixed amount. I think this occurs when indels are removed but not accounted for. 
 
 Please add any other feature requests or issues you find to the issues page. Thank you!

@@ -17,6 +17,9 @@ load_parameters_file = function(path){
   x
 }
 
+#' load an example parameters table
+#' 
+#' @return A dataframe
 #' @export
 load_example_params = function(){
   params = load_parameters_file(paste0(system.file("extdata", package = "multiEditR"), "/parameters.xlsx"))
@@ -26,6 +29,9 @@ load_example_params = function(){
   params
 }
 
+#' Saves an example parameters excel spreadsheet at the given location
+#' 
+#' @param path A writable file path, e.g. params.xlsx
 #' @export
 #' @importFrom writexl write_xlsx
 save_batch_skeleton = function(path){
@@ -33,7 +39,11 @@ save_batch_skeleton = function(path){
   writexl::write_xlsx(params, path)
 }
 
-
+#' run edit detection over multiple samples
+#' @param params A data.frame with the following columns: sample_file, control_file,
+#' motif, motif_fwd, wt, edit, phred_cutoff, p_value. see multiEditR::detect_edits for details.
+#' 
+#' @return A list of multiEditR objects
 #' @export
 detect_edits_batch = function(params = NULL){
   if (is.null(params)){
@@ -96,6 +106,10 @@ detect_edits_batch = function(params = NULL){
   fits
 }  
 
+#' get a single dataframe containing all test results
+#' 
+#' @param fits The result of multiEditR::detect_edits_batch 
+#' @return A data.frame
 #' @export
 #' @importFrom magrittr `%>%`
 #' @importFrom dplyr mutate select
@@ -114,6 +128,10 @@ get_batch_results_table = function(fits){
                   edit_sig, edit_pvalue, edit_padjust, A_perc, C_perc, G_perc, T_perc, sample_file)
 }
 
+#' get a single dataframe containing all test critical statistics
+#' 
+#' @param fits The result of multiEditR::detect_edits_batch 
+#' @return A data.frame
 #' @export
 #' @importFrom magrittr `%>%`
 #' @importFrom dplyr mutate select
@@ -129,6 +147,11 @@ get_batch_stats_table = function(fits){
     tidyr::pivot_wider(names_from = base, values_from = fillibens)
 }
 
+#' Creates an html report similar to the shiny app
+#' 
+#' @param batch_results The result of multiEditR::detect_edits_batch 
+#' @param params The parameters dataframe given to multiEditR::detect_edits_batch 
+#' @param path The file to write the html
 #' @export
 #' @importFrom rmarkdown render
 create_multiEditR_report = function(batch_results, params, path = "./multiEditR_batch_results.html"){

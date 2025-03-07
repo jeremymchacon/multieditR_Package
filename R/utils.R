@@ -302,10 +302,58 @@ is_file_ab1 = function(filepath){
 }
 
 ###
-# Plotting Functions
+# Data retrieval and Plotting Functions
 ###
 
 
+#' Get complete fit results
+#'
+#' @param fit the result of detect_edits
+#' @return A dataframe with the following columns:
+#' raw_sample_position - position in the sample sanger
+#' passed_trimming - whether the sample sanger passed trimming (TRUE) or was low quality (FALSE)
+#' motif_number - The numbered motif found in the control. -1 means not a match, 1 is the first match, 2 the second, etc.
+#' edit_sig - whether the WT was significantly changed
+#' control_base - The control sequence. Also serves as the motif sequence when motif_number > 0
+#' sample_primary_call - The highest defined peak in the sample
+#' sample_secondary_call - The second highest defined peak in the sample
+#' A-T_area - The maximum sample height of the base peak
+#' A-T_perc - The percent of this base peak's height over all bases
+#' edit_pvalue/adjust 
+#' motif_seq - the motif_seq as used. Meaning, if motif_fwd == FALSE, the rev-com of the motif you supplied
+#' sample_file
+#' control_file
+#' @export
+#' @importFrom dplyr mutate left_join
+#' @import ggplot2
+#' @importFrom magrittr `%>%`
+results = function(fit){
+  suppressMessages(
+    fit$intermediate_data$raw_sample_df %>%
+    dplyr::mutate(motif_seq = fit$sample_data$motif[1],
+           sample_file = basename(fit$sample_data$sample_file[1]),
+           control_file = basename(fit$intermediate_data$sample_alt$ctrl_file[1]),
+           ) %>%
+    dplyr::left_join(fit$sample_data %>%
+                       dplyr::mutate(raw_sample_position = index) %>%
+                       dplyr::rename(position_in_motif = target_base) %>%
+                dplyr::select(raw_sample_position,position_in_motif,
+                              edit_pvalue, edit_padjust, edit_sig)
+                ) %>%
+    dplyr::mutate(passed_trimming = !is_trimmed) %>%
+    dplyr::rename(control_base = control_primary_call) %>%
+    dplyr::rename(motif_number = motif) %>%
+    dplyr::select(raw_sample_position, passed_trimming, motif_number, edit_sig, control_base, 
+                  sample_primary_call, sample_secondary_call, A_area, C_area,
+                  G_area, T_area, A_perc, C_perc, G_perc, T_perc, edit_pvalue, 
+                  edit_padjust, motif_seq, sample_file, control_file)
+  )
+}
+
+#' Plot the primary call percentage and trim / motif detection points
+#'
+#' @param fit the result of detect_edits
+#' @return A ggplot object
 #' @export
 #' @importFrom dplyr mutate
 #' @import ggplot2
@@ -336,6 +384,10 @@ plot_raw_sample = function(fit){
 
 # Function for plotting trimmed sample data
 
+#' Plot the primary call percentage just in the non-trimmed data
+#'
+#' @param fit the result of detect_edits
+#' @return A ggplot object
 #' @importFrom dplyr mutate filter
 #' @import ggplot2
 #' @importFrom magrittr `%>%`
@@ -358,6 +410,10 @@ plot_trimmed_sample = function(fit){
     annotate("text", x = max(tmp$index) *0.12, y = 13, label = "motif bases", hjust = 0)
 }
 
+#' Plot statistics in the tested wt bases 
+#'
+#' @param fit the result of detect_edits
+#' @return A ggplot object
 #' @export
 #' @importFrom dplyr mutate filter
 #' @import ggplot2
@@ -560,6 +616,11 @@ plot_chromatogram_at_motif = function(sanger, raw_sample_df, motif,
              hjust = 0, vjust = 0, size = 2)
 }
 
+#' Plot the chromatogram + percentage tiles for all detected motifs in the sample
+#' 
+#'
+#' @param fit the result of detect_edits
+#' @return A ggplot object
 #' @export
 plot_sample_chromatogram = function(fit){
   motif = fit$motif
@@ -568,6 +629,11 @@ plot_sample_chromatogram = function(fit){
                              motif = motif, motif_fwd = motif_fwd)
 }
 
+#' Plot the chromatogram + percentage tiles for all detected motifs in the control
+#' 
+#'
+#' @param fit the result of detect_edits
+#' @return A ggplot object
 #' @export
 #' @import ggplot2
 #' @importFrom magrittr `%>%`

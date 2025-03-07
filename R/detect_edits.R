@@ -23,12 +23,40 @@
 # 4. Find all instances of motif in control sequence, allowing zero mismatches (because otherwise small motifs would have too many false positives)
 # 5. extract the trimmed, non-motif parts of the sample and use it to build the null distribution with ZAGA
 # 6. calculate the p-value for all wt -> edit transitions using the ZAGA statistics and BH adjustments
+#' the primary function to run edit detection. 
+#' 
+#'
+#' @param sample_file path to the sample .ab1 file
+#' @param ctrl_file path to the control .ab1 or .fa(sta) file
+#' @param motif string holding the motif of interest
+#' @param motif_fwd boolean, true if the motif should be in the control as-is. False if the motif requires rev-com.
+#' @param wt the base to be tested for editing in motif locations
+#' @param edit the predicted edit for the base
+#' @param phred_cutoff the cutoff for trimming. lower is more stringent. default = 0.001
+#' @param p_value the cutoff for BH-adjusted significance. 
+#' @return A multiEditR object (list of lists)
 #' @export
 #' @importFrom magrittr `%>%`
 #' @importFrom dplyr group_by ungroup select left_join distinct case_when summarize pull rename mutate arrange filter inner_join ungroup
 #' @importFrom sangerseqR readsangerseq makeBaseCalls
 #' @importFrom Biostrings countPattern matchPattern
 #' @importFrom pwalign pairwiseAlignment alignedSubject alignedPattern
+#' @examples
+#' 
+#' sample_file = system.file("extdata", "RP272_cdna_wt.ab1", package="multieditR")
+#' ctrl_file = system.file("extdata", "RP272_cdna_ko.ab1", package="multieditR")
+#' motif = "AGTAGCTGGGATTACAGATG"
+#' fit = detect_edits(sample_file, ctrl_file,
+#'             motif = motif, motif_fwd = TRUE,
+#'             wt = "A", edit = "G",
+#'             phred_cutoff = 0.001, p_value = 0.05)
+#'             
+#' results(fit)
+#' 
+#' plot_sample_chromatogram(fit)
+#' plot_raw_sample(fit)             
+#'             
+#' 
 detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
                             phred_cutoff = 0.00001, p_value = 0.01){
   

@@ -1,7 +1,7 @@
 Package: multiEditR
 Type: Package
 Title: multEditR Detects Base Edits from Sanger Sequencing Data
-Version: 0.1.0
+Version: 1.0.0
 Author: Mitch Kluesner, Jeremy Chacón
 Maintainer: Jeremy Chacón <chaco001@umn.edu>
 Description: This package loads sample sanger sequence(s), control sanger sequences or fasta files, and motifs, and detects edits in certain bases using the relative heights of the sanger trace. 

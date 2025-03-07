@@ -17,7 +17,11 @@ install.packages("devtools")
 Then, use devtools to install the multiEditR package:
 
 ```
-devtools::install_github("MoriarityLab/multiEditR.pckg")
+devtools::install_github("jeremymchacon/multiEditR.pckg")
+
+# Note: above is a temporary home. The permanent home will be:
+# devtools::install_github("MoriarityLab/multiEditR.pckg")
+
 ```
 
 ## Basic functionality:

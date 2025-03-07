@@ -43,8 +43,8 @@
 #' @importFrom pwalign pairwiseAlignment alignedSubject alignedPattern
 #' @examples
 #' 
-#' sample_file = system.file("extdata", "RP272_cdna_wt.ab1", package="multieditR")
-#' ctrl_file = system.file("extdata", "RP272_cdna_ko.ab1", package="multieditR")
+#' sample_file = system.file("extdata", "RP272_cdna_wt.ab1", package="multiEditR")
+#' ctrl_file = system.file("extdata", "RP272_cdna_ko.ab1", package="multiEditR")
 #' motif = "AGTAGCTGGGATTACAGATG"
 #' fit = detect_edits(sample_file, ctrl_file,
 #'             motif = motif, motif_fwd = TRUE,

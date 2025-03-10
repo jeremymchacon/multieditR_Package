@@ -24,6 +24,8 @@ Depends: R (>= 4.1.0),
     magrittr (>= 2.0.3),
     gamlss (>= 5.4),
     gamlss.dist (>= 6.1),
+    pwalign (>= 1.2),
+    rmarkdown,
     readxl,
     writexl
 Suggests: 

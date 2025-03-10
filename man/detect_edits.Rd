@@ -40,18 +40,19 @@ the primary function to run edit detection.
 }
 \examples{
 
-sample_file = system.file("extdata", "RP272_cdna_wt.ab1", package="multieditR")
-ctrl_file = system.file("extdata", "RP272_cdna_ko.ab1", package="multieditR")
+sample_file = system.file("extdata", "RP272_cdna_wt.ab1", package="multiEditR")
+ctrl_file = system.file("extdata", "RP272_cdna_ko.ab1", package="multiEditR")
 motif = "AGTAGCTGGGATTACAGATG"
 fit = detect_edits(sample_file, ctrl_file,
             motif = motif, motif_fwd = TRUE,
             wt = "A", edit = "G",
             phred_cutoff = 0.001, p_value = 0.05)
             
-results(fit)
+tbl = results(fit)
+writexl::write_xlsx(tbl, "my_results.xlsx") 
 
 plot_sample_chromatogram(fit)
-plot_raw_sample(fit)             
+plot_raw_sample(fit)       
             
 
 }

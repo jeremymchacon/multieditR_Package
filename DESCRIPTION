@@ -8,10 +8,8 @@ Description: This package loads sample sanger sequence(s), control sanger sequen
 License: MIT
 Encoding: UTF-8
 LazyData: true
-BiocViews:
-  rnaseq
-Depends: R (>= 4.4.0)
-Imports:
+biocViews: Alignment, SequenceMatching, Sequencing, Genetics
+Depends: 
     pwalign (>= 1.2.0),
     ggplot2 (>= 3.5.0),
     Biostrings (>= 2.71.5),

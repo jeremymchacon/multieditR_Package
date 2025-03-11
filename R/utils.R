@@ -100,14 +100,15 @@ subchar <- function(string, pos, char) {
 }
 
 #' @importFrom gamlss gamlss
+#' @importFrom dplyr filter
 #' @importFrom gamlss.dist qZAGA
 #' @importFrom magrittr `%>%`
 make_ZAGA_df = function(sanger_df, p_adjust){
   nvals <- list()
-  nvals$A = filter(sanger_df, max_base != "A")$A_area
-  nvals$C = filter(sanger_df, max_base != "C")$C_area
-  nvals$G = filter(sanger_df, max_base != "G")$G_area
-  nvals$T = filter(sanger_df, max_base != "T")$T_area
+  nvals$A = dplyr::filter(sanger_df, max_base != "A")$A_area
+  nvals$C = dplyr::filter(sanger_df, max_base != "C")$C_area
+  nvals$G = dplyr::filter(sanger_df, max_base != "G")$G_area
+  nvals$T = dplyr::filter(sanger_df, max_base != "T")$T_area
 
   n_models =   n_models <-lapply(nvals, FUN = function(x){
     set.seed(1)
@@ -118,12 +119,12 @@ make_ZAGA_df = function(sanger_df, p_adjust){
            0.0100030237039207, 0.0100045782875701, 0.0100048452355807, 0.0100049548867042)
     message("Replacement vector used for low noise.")
     } # add noise if all 0s, or all 0s and one other value.
-    tryCatch(gamlss::gamlss((x)~1, family = ZAGA), error=function(e) # Progressively step up the mu.start if it fails
-      tryCatch(gamlss::gamlss((x)~1, family = ZAGA, mu.start = 1), error=function(e)
-        tryCatch(gamlss::gamlss((x)~1, family = ZAGA, mu.start = 2), error=function(e)
-          tryCatch(gamlss::gamlss((x)~1, family = ZAGA, mu.start = 3), error=function(e) # additional step added.
-            tryCatch(gamlss::gamlss((x)~1, family = ZAGA, mu.start = 4), error=function(e) # additional step added.
-              gamlss::gamlss((x)~1, family = ZAGA, mu.start = mean(x))
+    tryCatch(gamlss::gamlss((x)~1, family = gamlss.dist::ZAGA), error=function(e) # Progressively step up the mu.start if it fails
+      tryCatch(gamlss::gamlss((x)~1, family = gamlss.dist::ZAGA, mu.start = 1), error=function(e)
+        tryCatch(gamlss::gamlss((x)~1, family = gamlss.dist::ZAGA, mu.start = 2), error=function(e)
+          tryCatch(gamlss::gamlss((x)~1, family = gamlss.dist::ZAGA, mu.start = 3), error=function(e) # additional step added.
+            tryCatch(gamlss::gamlss((x)~1, family = gamlss.dist::ZAGA, mu.start = 4), error=function(e) # additional step added.
+              gamlss::gamlss((x)~1, family = gamlss.dist::ZAGA, mu.start = mean(x))
             )
           )
         )
@@ -274,13 +275,13 @@ make_sample_df = function(sample_sanger){
   peak_locs
 }
 
-#' @importFrom pwalign pairwiseAlignment
+#' @importFrom Biostrings pairwiseAlignment
 is_revcom_ctrl_better = function(init_sample_seq,
                                  init_ctrl_seq){
   init_sample_seq = as.character(init_sample_seq)
   init_ctrl_seq = as.character(init_ctrl_seq)
-  fwd_score = score(pwalign::pairwiseAlignment(init_sample_seq, init_ctrl_seq))
-  rev_score = score(pwalign::pairwiseAlignment(init_sample_seq, 
+  fwd_score = Biostrings::score(Biostrings::pairwiseAlignment(init_sample_seq, init_ctrl_seq))
+  rev_score = Biostrings::score(Biostrings::pairwiseAlignment(init_sample_seq, 
                                                revcom(init_ctrl_seq)))
   return(rev_score > fwd_score)
 }

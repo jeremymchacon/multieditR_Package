@@ -37,10 +37,9 @@
 #' @return A multiEditR object (list of lists)
 #' @export
 #' @importFrom magrittr `%>%`
-#' @importFrom dplyr group_by ungroup select left_join distinct case_when summarize pull rename mutate arrange filter inner_join ungroup
+#' @importFrom dplyr group_by ungroup select left_join distinct case_when summarize pull n rename mutate arrange filter inner_join ungroup
 #' @importFrom sangerseqR readsangerseq makeBaseCalls
-#' @importFrom Biostrings countPattern matchPattern
-#' @importFrom pwalign pairwiseAlignment alignedSubject alignedPattern
+#' @importFrom Biostrings countPattern matchPattern pairwiseAlignment alignedSubject alignedPattern
 #' @examples
 #' 
 #' sample_file = system.file("extdata", "RP272_cdna_wt.ab1", package="multiEditR")
@@ -109,12 +108,12 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
   
   
   # apply the control sequence to the sample sequence. 
-  control_alignment = pwalign::pairwiseAlignment(pattern = DNAString(ctrl_seq), 
+  control_alignment = Biostrings::pairwiseAlignment(pattern = DNAString(ctrl_seq), 
                                         subject = DNAString(sample_seq))
   
-  aligned_sample = as.character(pwalign::alignedSubject(control_alignment))
+  aligned_sample = as.character(Biostrings::alignedSubject(control_alignment))
   aligned_sample = strsplit(aligned_sample, "")[[1]]
-  aligned_control = as.character(pwalign::alignedPattern(control_alignment))
+  aligned_control = as.character(Biostrings::alignedPattern(control_alignment))
   aligned_control = strsplit(aligned_control, "")[[1]]
   
   # figure out the raw sample position
@@ -245,7 +244,7 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
       dplyr::mutate(base = edit) %>%
       dplyr::mutate(sig = ifelse(edit_sig, "Significant", "Non-significant")) %>%
       dplyr::group_by(sig) %>%
-      dplyr::mutate(tally = n()) %>%
+      dplyr::mutate(tally = dplyr::n()) %>%
       dplyr::select(index, base, perc, sig, tally) %>%
       dplyr::filter(!is.na(sig))
   )

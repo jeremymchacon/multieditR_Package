@@ -33,7 +33,7 @@ DT::datatable(params$params.tbl)
 
 ## Model fit data
 ```{r, eval = TRUE, message = FALSE, echo = FALSE}
-  DT::datatable(mutate_if(get_batch_stats_table(params$results.list),
+  DT::datatable(dplyr::mutate_if(get_batch_stats_table(params$results.list),
                           is.numeric, round, digits = 3))
 ```
 
@@ -90,7 +90,7 @@ for (fit in fits){
    print(
    tagList(
     fit$sample_data %>%
-      mutate_if(is.numeric, round, digits=3) %>%
+      dplyr::mutate_if(is.numeric, round, digits=3) %>%
       dplyr::select(-sample_name, -motif, -ctrl_max_base) %>%
       DT::datatable()
    )
@@ -100,7 +100,7 @@ for (fit in fits){
    print(
    tagList(
         fit$statistical_parameters %>%
-      mutate_if(is.numeric, round, digits=3) %>%
+      dplyr::mutate_if(is.numeric, round, digits=3) %>%
       DT::datatable()
    )
   )

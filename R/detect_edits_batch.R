@@ -112,13 +112,13 @@ detect_edits_batch = function(params = NULL){
 #' @return A data.frame
 #' @export
 #' @importFrom magrittr `%>%`
-#' @importFrom dplyr mutate select
+#' @importFrom dplyr mutate select tibble
 #' @importFrom plyr ldply
 get_batch_results_table = function(fits){
   # toss fits which failed
   fits = fits[sapply(fits, FUN = function(x){x$completed})]
   fits %>% lapply(., "[[", 1) %>%
-    plyr::ldply(., "tibble") %>%
+    plyr::ldply(., "dplyr::tibble") %>%
     dplyr::mutate(target_position_in_motif = target_base) %>%
     dplyr::mutate(position_in_sample_trace = index) %>%
     dplyr::mutate(sample_max_base = max_base) %>%
@@ -134,14 +134,14 @@ get_batch_results_table = function(fits){
 #' @return A data.frame
 #' @export
 #' @importFrom magrittr `%>%`
-#' @importFrom dplyr mutate select
+#' @importFrom dplyr mutate select tibble
 #' @importFrom tidyr pivot_wider
 #' @importFrom plyr ldply
 get_batch_stats_table = function(fits){
   # toss fits which failed
   fits = fits[sapply(fits, FUN = function(x){x$completed})]
   fits %>% lapply(., "[[", 2) %>%
-    plyr::ldply(., "tibble") %>%
+    plyr::ldply(., "dplyr::tibble") %>%
     dplyr::mutate(base = paste0(base, " fillibens coef.")) %>%
     dplyr::select(sample_name, base, fillibens) %>%
     tidyr::pivot_wider(names_from = base, values_from = fillibens)

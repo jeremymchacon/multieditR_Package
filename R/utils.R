@@ -639,9 +639,10 @@ plot_sample_chromatogram = function(fit){
 #' @export
 #' @import ggplot2
 #' @importFrom magrittr `%>%`
+#' @importFrom stringr str_detect
 #' @importFrom dplyr as_tibble group_by ungroup select left_join distinct case_when summarize pull rename mutate arrange filter inner_join ungroup
 plot_control_chromatogram = function(fit){
-  if (str_detect(fit$intermediate_data$sample_alt$ctrl_file[1], "\\.fa")){
+  if (stringr::str_detect(fit$intermediate_data$sample_alt$ctrl_file[1], "\\.fa")){
     message("control was not .ab1, returning empty ggplot")
     return(ggplot()+
              theme_void()+

@@ -222,7 +222,8 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
   )
   
   if (!motif_fwd){
-    sample_data$target_base = max(sample_data$target_base) - (sample_data$target_base - 1)
+    target_base = as.numeric(sample_data$target_base)
+    sample_data$target_base = nchar(motif) - (target_base - 1)
   }
   
   raw_sample_df = alignment_df %>%

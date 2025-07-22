@@ -221,6 +221,10 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
            edit_pvalue, edit_padjust, edit_sig, index, sample_file)
   )
   
+  if (!motif_fwd){
+    sample_data$target_base = max(sample_data$target_base) - (sample_data$target_base - 1)
+  }
+  
   raw_sample_df = alignment_df %>%
     dplyr::mutate(Tot.Area = A_area + C_area + G_area + T_area) %>%
     dplyr::group_by(raw_sample_position) %>%
@@ -248,6 +252,8 @@ detect_edits = function(sample_file, ctrl_file, motif, motif_fwd, wt, edit,
       dplyr::select(index, base, perc, sig, tally) %>%
       dplyr::filter(!is.na(sig))
   )
+  
+  
   
   motif_positions = motif_part_of_sample %>%
     dplyr::mutate(ctrl_post_aligned_index = index) %>%
